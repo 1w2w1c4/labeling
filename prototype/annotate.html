@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>標註</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  html, body { height: 100%; }
+  body { display: flex; flex-direction: column; overflow: hidden; }
+
+  /* 子工具列 */
+  .subbar {
+    height: 52px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 16px;
+    background: var(--surface); border-bottom: 1px solid var(--border); font-size: 14px; white-space: nowrap;
+  }
+  .subbar .sep { width: 1px; height: 24px; background: var(--border); }
+  .subbar .back { color: var(--muted); text-decoration: none; font-size: 13.5px; }
+  .subbar .back:hover { color: var(--primary); }
+  .fname { font-weight: 600; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .nav { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+  .nav .btn { height: 32px; padding: 0 10px; font-size: 13px; font-weight: 500; }
+  .grow { flex: 1; min-width: 8px; }
+  .mode { display: flex; align-items: center; gap: 8px; }
+  .mode .btn { height: 34px; padding: 0 14px; font-size: 13.5px; }
+  .lockinfo { font-size: 12.5px; color: var(--muted); }
+  .btn-danger-ghost { background: var(--surface); border-color: var(--border); color: var(--danger); }
+  .btn-danger-ghost:hover { background: var(--danger-soft); }
+  .btn-sm { height: 30px !important; padding: 0 10px !important; font-size: 13px !important; }
+
+  /* 工作區 */
+  .work { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 330px; }
+  .stage { position: relative; background: #0b0d10; overflow: hidden; min-width: 0; }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .blocked {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(8,10,14,.55);
+  }
+  .blocked.show { display: flex; }
+  .blocked .box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; text-align: center; max-width: 340px; }
+  .blocked .box p { margin: 6px 0 14px; color: var(--muted); font-size: 13.5px; }
+  .blocked .box .btns { display: flex; gap: 8px; justify-content: center; }
+
+  /* 右側面板 */
+  .side { background: var(--surface); border-left: 1px solid var(--border); overflow-y: auto; min-width: 0; }
+  .sec { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .sec h3 { margin: 0 0 10px; font-size: 13px; color: var(--muted); font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+  .sec h3 .x { font-weight: 400; font-size: 12px; }
+
+  .curcls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 14px; }
+  .curcls .sw { width: 14px; height: 14px; border-radius: 4px; flex: none; }
+  .curcls .sub { color: var(--muted); font-size: 12px; }
+  .recent { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .rchip {
+    display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface); font-size: 12.5px;
+  }
+  .rchip:hover:not(:disabled) { border-color: var(--primary); }
+  .rchip.on { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); font-weight: 600; }
+  .rchip .sw { width: 10px; height: 10px; border-radius: 3px; }
+  .rchip .k { font-size: 10.5px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+  .rec { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: baseline; font-size: 13px; background: var(--surface-2); }
+  .rec .lbl { color: var(--muted); font-size: 12px; }
+  .rec .t { color: var(--text); font-variant-numeric: tabular-nums; margin-left: 8px; font-size: 12.5px; }
+  .rec .none { color: var(--muted); }
+  .dlist { display: flex; flex-direction: column; gap: 4px; }
+  .drow {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; cursor: pointer;
+    border: 1px solid transparent; font-size: 13.5px;
+  }
+  .drow:hover { background: var(--surface-2); }
+  .drow.sel { border-color: var(--primary); background: var(--primary-soft); }
+  .drow .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+  .drow .no { color: var(--muted); font-size: 12px; width: 18px; }
+  .drow .sz { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .ib { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 2px 4px; border-radius: 4px; font-size: 13px; }
+  .ib:hover { color: var(--text); background: var(--surface); }
+  .empty-d { color: var(--muted); font-size: 13px; padding: 4px 0; }
+
+  .xywh { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .xywh label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+  .xywh input {
+    width: 100%; height: 30px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2);
+    padding: 0 6px; font-size: 13px; min-width: 0;
+  }
+  .form { display: grid; grid-template-columns: 56px 1fr; gap: 8px 10px; align-items: center; font-size: 13px; }
+  .form label { color: var(--muted); }
+  .form input[type=text], .form select {
+    width: 100%; height: 30px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2);
+    padding: 0 8px; font-size: 13px; min-width: 0;
+  }
+  .kv { display: grid; grid-template-columns: 56px 1fr; gap: 4px 10px; font-size: 12.5px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; overflow-wrap: anywhere; }
+  details.sec summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; list-style: none; }
+  details.sec summary::-webkit-details-marker { display: none; }
+  details.sec summary::before { content: "▸ "; }
+  details.sec[open] summary::before { content: "▾ "; }
+  details.sec[open] summary { margin-bottom: 10px; }
+  .keys { font-size: 12px; color: var(--muted); display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; }
+  kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--surface-2); color: var(--text); }
+
+  /* 狀態列 */
+  .statusbar {
+    height: 28px; flex: none; display: flex; align-items: center; gap: 18px; padding: 0 14px; font-size: 12px;
+    color: var(--muted); background: var(--surface); border-top: 1px solid var(--border); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden;
+  }
+  .statusbar .dirty { color: var(--warn); font-weight: 600; }
+
+  /* 對話框 */
+  .backdrop { position: fixed; inset: 0; background: rgba(10,12,16,.45); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 30; }
+  .backdrop.show { display: flex; }
+  .modal { width: 100%; max-width: 420px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,.3); padding: 20px 22px; }
+  .modal h4 { margin: 0 0 6px; font-size: 16px; }
+  .modal p { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+  .modal .foot { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+
+  .center-msg { margin: auto; text-align: center; color: var(--muted); padding: 40px 16px; }
+
+  @media (max-width: 900px) {
+    body { overflow: auto; }
+    .work { grid-template-columns: 1fr; grid-template-rows: 62vh auto; }
+    .side { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--border); }
+    .subbar { overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<header class="app"></header>
+<div id="app" style="display:contents"></div>
+
+<div class="backdrop" id="dlg"><div class="modal" id="dlgBox"></div></div>
+
+<script src="common.js"></script>
+<script>
+renderHeader();
+
+/* ================= 載入資料 ================= */
+const params = new URLSearchParams(location.search);
+const LOT = (params.get('lot') || '').toUpperCase();
+const ID = params.get('id') || '';
+const QUEUE = params.get('queue') === '1';
+const filters = readFilters(params);
+const lot = LOT_RE.test(LOT) ? getLot(LOT) : null;
+const items = lot && lot.status !== 'new' ? genItems(LOT, lot) : [];
+const item = items.find(x => x.id === ID);
+
+if (!item) {
+  $('app').innerHTML = `<div class="center-msg"><div style="font-size:16px;color:var(--text);margin-bottom:12px">找不到這張圖（Lot「${esc(LOT)}」/ ${esc(ID)}）</div>
+    <a class="btn btn-primary" href="${lot ? 'lot.html?lot=' + encodeURIComponent(LOT) : 'index.html'}">回清單</a></div>`;
+  throw new Error('stop');
+}
+document.title = `${item.filename} · ${LOT}`;
+const W = lot.width, H = lot.height;   // 圖片固定 300 × 300
+
+// 上一張／下一張：只在目前篩選結果（或佇列：未標註且沒人鎖定）內移動
+const inSet = QUEUE ? (it) => it.verdict === 'none' && !it.lockedBy : (it) => matchFilters(it, filters);
+const setList = items.filter(inSet);
+const prevItem = [...setList].reverse().find(it => it.idx < item.idx) || null;
+const nextItem = setList.find(it => it.idx > item.idx) || null;
+const posInSet = setList.findIndex(it => it.id === item.id);
+
+function urlFor(it) {
+  const q = new URLSearchParams(location.search); q.set('id', it.id); q.delete('box');
+  return 'annotate.html?' + q.toString();
+}
+const listUrl = (() => {
+  const q = new URLSearchParams({ lot: LOT });
+  if (!QUEUE) for (const k of FILTER_KEYS) if (filters[k]) q.set(k, filters[k]);
+  return 'lot.html?' + q;
+})();
+
+/* ================= bbox：資料存 {x, y, w, h}，拖曳時換算成兩個角點 ================= */
+const corners = (b) => ({ x1: b.x, y1: b.y, x2: b.x + b.w, y2: b.y + b.h });
+function fromCorners(c) {
+  const x1 = Math.max(0, Math.min(W, Math.round(Math.min(c.x1, c.x2)))), x2 = Math.max(0, Math.min(W, Math.round(Math.max(c.x1, c.x2))));
+  const y1 = Math.max(0, Math.min(H, Math.round(Math.min(c.y1, c.y2)))), y2 = Math.max(0, Math.min(H, Math.round(Math.max(c.y1, c.y2))));
+  return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+}
+function clampXYWH(b) {
+  const w = Math.max(1, Math.min(W, Math.round(b.w))), h = Math.max(1, Math.min(H, Math.round(b.h)));
+  return { x: Math.max(0, Math.min(W - w, Math.round(b.x))), y: Math.max(0, Math.min(H - h, Math.round(b.y))), w, h };
+}
+
+/* ================= 狀態（進入即編輯，不需要唯讀模式） ================= */
+const activeClasses = CLASSES.filter(c => c.active);
+// 最近使用的類別（快捷鍵 1–8），存在瀏覽器
+let RECENT = (() => { try { return JSON.parse(localStorage.getItem('dl_recent_cls') || 'null'); } catch { return null; } })()
+  || activeClasses.slice(0, 6).map(c => c.id);
+RECENT = RECENT.filter(id => CLASSES[id]?.active).slice(0, 8);
+function pushRecent(id) {
+  RECENT = [id, ...RECENT.filter(x => x !== id)].slice(0, 8);
+  try { localStorage.setItem('dl_recent_cls', JSON.stringify(RECENT)); } catch {}
+}
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const LOCKED = !!item.lockedBy;   // 別人持有編輯鎖時無法編輯
+const S = {
+  cls: activeClasses[0].id, sel: null, hover: null,
+  defects: clone(item.defects),
+  explicit: '',
+  version: item.version, status: item.status,
+  annotated_by: item.annotated_by, annotated_at: item.annotated_at, updated_by: item.updated_by, updated_at: item.updated_at,
+  undo: [], redo: [],
+  showBoxes: true, showLabels: true,
+  view: { s: 1, ox: 0, oy: 0 }, cursor: null,
+};
+let saved = JSON.stringify({ d: S.defects, e: S.explicit });
+const snap = () => JSON.stringify({ d: S.defects, e: S.explicit });
+const isDirty = () => snap() !== saved;
+// 沒有判定按鈕：儲存時有框為 NG，沒框為 OK
+const verdict = () => S.defects.length ? 'NG' : 'OK';
+const selD = () => S.defects.find(d => d.id === S.sel) || null;
+const uid = () => 'n' + Math.random().toString(36).slice(2, 10);
+
+/* ================= 版面 ================= */
+$('app').innerHTML = `
+  <div class="subbar">
+    <a class="back" href="${listUrl}">← ${QUEUE ? 'Lot 清單' : '回清單'}</a>
+    <span class="sep"></span>
+    <span class="mono" style="color:var(--muted);font-size:13px">${LOT}</span>
+    <span class="fname mono">${item.filename}</span>
+    <span style="color:var(--muted);font-size:12.5px">#${fmt(item.idx)}</span>
+    <span class="sep"></span>
+    <div class="nav">
+      <button class="btn btn-ghost" id="prevBtn" ${prevItem ? '' : 'disabled'} title="上一張（A）">‹ 上一張</button>
+      <span>${QUEUE ? '佇列剩 ' + fmt(setList.length) + ' 張'
+        : (Object.values(filters).some(v => v) ? '篩選結果 ' : '全部 ') + (posInSet >= 0 ? fmt(posInSet + 1) : '–') + ' / ' + fmt(setList.length)}</span>
+      <button class="btn btn-ghost" id="nextBtn" ${nextItem ? '' : 'disabled'} title="下一張（D）">下一張 ›</button>
+    </div>
+    <span class="grow"></span>
+    <div class="mode" id="mode"></div>
+    <span class="sep"></span>
+    <button class="btn btn-ghost btn-sm" onclick="toast('歷史版本頁（尚未製作）')">歷史紀錄</button>
+  </div>
+
+  <div class="work">
+    <div class="stage" id="stage">
+      <canvas id="cv"></canvas>
+      <div class="blocked ${LOCKED ? 'show' : ''}">
+        <div class="box">
+          <div style="font-weight:600">🔒 ${item.lockedBy || ''} 正在編輯這張圖</div>
+          <p>同一時間只能一個人編輯，請先處理其他圖片。</p>
+          <div class="btns">
+            <a class="btn btn-ghost btn-sm" href="${listUrl}">回清單</a>
+            ${nextItem ? `<a class="btn btn-primary btn-sm" href="${urlFor(nextItem)}">下一張</a>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="side" id="side"></aside>
+  </div>
+
+  <div class="statusbar">
+    <span id="sbXY">—</span><span>${W} × ${H} px</span>
+    <span id="sbVer"></span><span id="sbDirty"></span>
+  </div>`;
+
+/* ================= 上方：鎖狀態與儲存 ================= */
+function renderMode() {
+  if (LOCKED) { $('mode').innerHTML = `<span class="badge b-orange">🔒 ${item.lockedBy} 編輯中</span>`; return; }
+  $('mode').innerHTML = `<span class="lockinfo" title="進入即取得編輯鎖，停留期間自動續約，離開時釋放">🔒 編輯中</span>
+    <button class="btn btn-ghost" id="revertBtn" ${isDirty() ? '' : 'disabled'} title="還原到上次儲存">還原</button>
+    <button class="btn btn-ghost" id="saveBtn" title="Ctrl+S">儲存</button>
+    <button class="btn btn-primary" id="saveNextBtn" title="Ctrl+Enter" ${nextItem ? '' : 'disabled'}>儲存並下一張</button>`;
+  $('revertBtn').onclick = revert;
+  $('saveBtn').onclick = () => save();
+  $('saveNextBtn').onclick = () => save(() => go(nextItem));
+}
+function revert() {
+  showDialog('還原修改？', '會回到上次儲存的內容，尚未儲存的修改會遺失。', [
+    { label: '取消' },
+    { label: '還原', danger: true, fn: () => { const o = JSON.parse(saved); S.defects = o.d; S.explicit = o.e; S.sel = null; S.undo = []; S.redo = []; renderAll(); } }]);
+}
+
+/* ================= 儲存（樂觀鎖：帶 version） ================= */
+function save(after) {
+  if (LOCKED) return;
+  if (!isDirty() && S.annotated_by) { if (after) after(); else toast('沒有需要儲存的修改'); return; }
+  const v = verdict();
+  // 整張圖記一組時間：第一次儲存寫框圖人員／時間，之後有修改再寫修改人員／時間
+  // （正式版由後端依登入者與伺服器時間寫入）
+  const by = CURRENT_USER, at = nowStr();
+  const first = !S.annotated_by;
+  if (first) { S.annotated_by = by; S.annotated_at = at; }
+  else { S.updated_by = by; S.updated_at = at; }
+  S.version += 1;
+  if (S.status === 'approved') S.status = 'reopened';
+  else if (S.status === 'unassigned') S.status = 'in_progress';
+  saveEdit(item.id, { defects: S.defects, verdict: v, version: S.version, status: S.status,
+    annotated_by: S.annotated_by, annotated_at: S.annotated_at, updated_by: S.updated_by, updated_at: S.updated_at });
+  saved = snap();
+  toast(`${first ? '已記錄框圖' : '已記錄修改'}：${by} · ${at}（v${S.version}）· 判定 ${VERDICT[v].label}${S.defects.length ? ' · ' + S.defects.length + ' 框' : ''}`);
+  renderAll();
+  if (after) setTimeout(after, 250);
+}
+
+/* ================= 導覽（有未儲存修改時先確認） ================= */
+function go(target) {
+  if (!target) return;
+  const url = urlFor(target);
+  if (isDirty()) {
+    showDialog('有尚未儲存的修改', '要先儲存再離開這張圖嗎？', [
+      { label: '取消' },
+      { label: '不儲存', danger: true, fn: () => { saved = snap(); location.href = url; } },
+      { label: '儲存後前往', primary: true, fn: () => save(() => location.href = url) },
+    ]);
+  } else location.href = url;
+}
+$('prevBtn').onclick = () => go(prevItem);
+$('nextBtn').onclick = () => go(nextItem);
+window.addEventListener('beforeunload', (e) => { if (isDirty()) { e.preventDefault(); e.returnValue = ''; } });
+
+/* ================= 復原／重做 ================= */
+function commit(before) {
+  if (before === snap()) return;
+  S.undo.push(before); if (S.undo.length > 100) S.undo.shift();
+  S.redo = [];
+  renderAll();
+}
+function mutate(fn) { if (LOCKED) return; const b = snap(); fn(); commit(b); }
+function undo() {
+  if (!S.undo.length) return;
+  S.redo.push(snap()); const o = JSON.parse(S.undo.pop()); S.defects = o.d; S.explicit = o.e;
+  if (!selD()) S.sel = null; renderAll();
+}
+function redo() {
+  if (!S.redo.length) return;
+  S.undo.push(snap()); const o = JSON.parse(S.redo.pop()); S.defects = o.d; S.explicit = o.e;
+  if (!selD()) S.sel = null; renderAll();
+}
+
+/* ================= 右側面板 ================= */
+function renderSide() {
+  const dis = LOCKED ? 'disabled' : '';
+  // 判定自動決定：有框為 NG、沒框為 OK；尚未標註且沒畫框時不比對
+  const v = S.defects.length ? 'NG' : (S.annotated_by ? 'OK' : 'none');
+  const cmp = computeAiCmp(v, item.ai, S.defects);
+  const d = selD();
+  const curId = d ? d.class_id : S.cls, cur = CLASSES[curId];
+  $('side').innerHTML = `
+    <section class="sec rec" title="以整張圖為單位，儲存時記錄">
+      <span class="lbl">框圖</span>
+      <span>${S.annotated_by ? `<b>${esc(S.annotated_by)}</b><span class="t mono">${S.annotated_at}</span>` : '<span class="none">尚未框圖（儲存時記錄）</span>'}</span>
+      <span class="lbl">修改</span>
+      <span>${S.updated_by ? `<b>${esc(S.updated_by)}</b><span class="t mono">${S.updated_at}</span>` : '<span class="none">—</span>'}</span>
+      <span class="lbl">AI</span>
+      <span title="AI 分類結果（來源資料帶入，不可修改）"><b>${aiLabel(item.ai)}</b><span class="t mono">${item.aiScore.toFixed(2)}</span>
+        ${cmp ? `<span class="badge" style="margin-left:8px;background:transparent;border:1px solid ${AI_CMP[cmp].color};color:${AI_CMP[cmp].color}" title="${AI_CMP[cmp].tip}">${AI_CMP[cmp].label}</span>` : ''}</span>
+    </section>
+
+    <section class="sec">
+      <h3>${d ? `框 #${S.defects.indexOf(d) + 1} 的類別` : '新框類別'} <span class="x">按 / 搜尋 · 1–${RECENT.length} 最近使用</span></h3>
+      <div class="curcls"><span class="sw" style="background:${cur.color}"></span><b>${cur.display}</b>
+        <span class="sub mono">${cur.name} · #${cur.id}</span>${cur.active ? '' : '<span class="sub">（停用）</span>'}</div>
+      ${LOCKED ? '' : '<div id="clsCombo"></div>'}
+      <div class="recent">
+        ${RECENT.map((id, i) => { const c = CLASSES[id]; return `<button class="rchip ${id === curId ? 'on' : ''}" data-c="${id}" ${dis} title="${c.name}">
+          <span class="sw" style="background:${c.color}"></span>${c.display}<span class="k">${i + 1}</span></button>`; }).join('')}
+      </div>
+    </section>
+
+    <section class="sec">
+      <h3>缺點清單（${S.defects.length}）<span class="x mono">x, y, w, h</span></h3>
+      <div class="dlist">
+        ${S.defects.length ? S.defects.map((x, i) => {
+          const c = CLASSES[x.class_id], b = x.bbox;
+          return `<div class="drow ${x.id === S.sel ? 'sel' : ''}" data-id="${x.id}">
+            <span class="no">${i + 1}</span><span class="sw" style="background:${c.color}"></span>
+            <span>${c.display}${c.active ? '' : '<span style="color:var(--muted);font-size:12px">（停用）</span>'}</span>
+            <span class="sz mono">${b.x}, ${b.y}, ${b.w}, ${b.h}</span>
+            ${LOCKED ? '' : `<button class="ib" data-act="del" title="刪除（Delete）">✕</button>`}
+          </div>`;
+        }).join('') : `<div class="empty-d">在圖片上拖曳即可新增框。</div>`}
+      </div>
+    </section>
+
+    ${d ? `
+    <section class="sec">
+      <h3>選取框 #${S.defects.indexOf(d) + 1} <span class="x">像素座標</span></h3>
+      <div class="xywh">
+        ${['x', 'y', 'w', 'h'].map(k => `<div><label>${k}</label><input type="number" class="mono" data-f="${k}" value="${d.bbox[k]}"
+          min="${k === 'w' || k === 'h' ? 1 : 0}" max="${k === 'x' || k === 'w' ? W : H}" ${dis}></div>`).join('')}
+      </div>
+    </section>` : ''}
+
+    <details class="sec">
+      <summary>圖片資訊</summary>
+      <dl class="kv">
+        <dt>路徑</dt><dd class="mono">${item.path}</dd>
+        <dt>尺寸</dt><dd>${W} × ${H} · png · 3 ch</dd>
+        <dt>產品</dt><dd>${lot.product}</dd>
+        <dt>站點</dt><dd>${lot.station}</dd>
+        <dt>拍攝</dt><dd>${item.captured}</dd>
+        <dt>版本</dt><dd>v${S.version}</dd>
+      </dl>
+    </details>
+
+`;
+  if (!LOCKED) mountCombo($('clsCombo'), {
+    placeholder: d ? '輸入名稱或代碼，變更此框類別…' : '輸入類別名稱或代碼搜尋…',
+    items: () => activeClasses.map(c => ({ v: c.id, label: c.display, sub: c.name, color: c.color })),
+    recent: () => RECENT,
+    onPick: (v) => pickClass(v),
+  });
+}
+
+$('side').addEventListener('click', (e) => {
+  const cb = e.target.closest('.rchip');
+  if (cb) { pickClass(+cb.dataset.c); return; }
+  const row = e.target.closest('.drow');
+  if (row) {
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'del') { mutate(() => { S.defects = S.defects.filter(x => x.id !== row.dataset.id); if (S.sel === row.dataset.id) S.sel = null; }); return; }
+    S.sel = row.dataset.id; renderAll();
+  }
+});
+$('side').addEventListener('change', (e) => {
+  const d = selD(); if (!d) return;
+  const f = e.target.dataset.f, a = e.target.dataset.a;
+  if (f) mutate(() => { d.bbox = clampXYWH({ ...d.bbox, [f]: +e.target.value || 0 }); });
+  else if (a) mutate(() => { d.attributes = { ...(d.attributes || {}), [a]: e.target.value }; });
+});
+
+function pickClass(id) {
+  pushRecent(id);
+  const d = selD();
+  if (d) mutate(() => { d.class_id = id; });
+  else { S.cls = id; renderSide(); }
+}
+
+/* ================= 畫布（圖片固定符合畫布，不縮放、不平移） ================= */
+const stage = $('stage'), cv = $('cv'), ctx = cv.getContext('2d');
+const IMG = makePcbCanvas(item.thumb, W, H);
+let cw = 0, ch = 0, dpr = 1;
+const toImg = (p) => ({ x: (p.x - S.view.ox) / S.view.s, y: (p.y - S.view.oy) / S.view.s });
+const toScr = (x, y) => ({ x: x * S.view.s + S.view.ox, y: y * S.view.s + S.view.oy });
+const clampPt = (ip) => ({ x: Math.round(Math.max(0, Math.min(W, ip.x))), y: Math.round(Math.max(0, Math.min(H, ip.y))) });
+
+function layoutCanvas() {
+  const r = stage.getBoundingClientRect();
+  dpr = devicePixelRatio || 1; cw = r.width; ch = r.height;
+  cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+  const s = Math.min(cw / W, ch / H) * 0.94;
+  S.view = { s, ox: (cw - W * s) / 2, oy: (ch - H * s) / 2 };
+  draw();
+}
+
+const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+function handlePts(b) {
+  const a = toScr(b.x, b.y), z = toScr(b.x + b.w, b.y + b.h), mx = (a.x + z.x) / 2, my = (a.y + z.y) / 2;
+  return { nw: [a.x, a.y], n: [mx, a.y], ne: [z.x, a.y], e: [z.x, my], se: [z.x, z.y], s: [mx, z.y], sw: [a.x, z.y], w: [a.x, my] };
+}
+
+let drag = null;
+function draw() {
+  if (!cw) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
+  // 圖片（300×300 放大顯示，保留像素銳利度）
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(IMG, S.view.ox, S.view.oy, W * S.view.s, H * S.view.s);
+  ctx.strokeStyle = 'rgba(255,255,255,.15)'; ctx.lineWidth = 1;
+  ctx.strokeRect(S.view.ox - .5, S.view.oy - .5, W * S.view.s + 1, H * S.view.s + 1);
+
+  // 框
+  if (S.showBoxes) {
+    ctx.font = '600 12px -apple-system, "PingFang TC", "Noto Sans TC", sans-serif';
+    S.defects.forEach((d, i) => {
+      const b = d.bbox, c = CLASSES[d.class_id];
+      const a = toScr(b.x, b.y), z = toScr(b.x + b.w, b.y + b.h);
+      const sel = d.id === S.sel, hov = d.id === S.hover;
+      ctx.fillStyle = c.color + (sel ? '30' : hov ? '22' : '12');
+      ctx.fillRect(a.x, a.y, z.x - a.x, z.y - a.y);
+      ctx.strokeStyle = c.color; ctx.lineWidth = sel ? 3 : hov ? 2.5 : 2;
+      ctx.strokeRect(a.x, a.y, z.x - a.x, z.y - a.y);
+      if (S.showLabels) {
+        const t = `${i + 1} ${c.display}`;
+        const tw = ctx.measureText(t).width + 10;
+        const ty = a.y - 19 < S.view.oy ? a.y : a.y - 19;
+        ctx.fillStyle = c.color; ctx.fillRect(a.x - (sel ? 1.5 : 1), ty, tw, 19);
+        ctx.fillStyle = '#fff'; ctx.fillText(t, a.x + 4, ty + 14);
+      }
+      if (sel && !LOCKED) {
+        const hp = handlePts(b);
+        for (const h of HANDLES) {
+          ctx.fillStyle = '#fff'; ctx.strokeStyle = c.color; ctx.lineWidth = 2;
+          ctx.fillRect(hp[h][0] - 4, hp[h][1] - 4, 8, 8); ctx.strokeRect(hp[h][0] - 4, hp[h][1] - 4, 8, 8);
+        }
+      }
+    });
+  }
+  // 畫框中：顯示 x, y, w, h
+  if (drag && drag.type === 'draw') {
+    const c = CLASSES[S.cls], b = fromCorners(drag.c);
+    const a = toScr(b.x, b.y), z = toScr(b.x + b.w, b.y + b.h);
+    ctx.setLineDash([5, 4]); ctx.strokeStyle = c.color; ctx.lineWidth = 2;
+    ctx.strokeRect(a.x, a.y, z.x - a.x, z.y - a.y); ctx.setLineDash([]);
+    tag(`x ${b.x}, y ${b.y}, w ${b.w}, h ${b.h}`, z.x + 6, z.y + 6);
+  }
+  // 拖曳移動／調整時顯示目前座標
+  if (drag && (drag.type === 'move' || drag.type === 'resize') && selD()) {
+    const b = selD().bbox, z = toScr(b.x + b.w, b.y + b.h);
+    tag(`x ${b.x}, y ${b.y}, w ${b.w}, h ${b.h}`, z.x + 6, z.y + 6);
+  }
+  // 十字準線（游標不在框上時）
+  if (!LOCKED && S.cursor && (drag ? drag.type === 'draw' : !S.hover && !hitHandle(S.cursor))) {
+    ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(0, S.cursor.y + .5); ctx.lineTo(cw, S.cursor.y + .5);
+    ctx.moveTo(S.cursor.x + .5, 0); ctx.lineTo(S.cursor.x + .5, ch); ctx.stroke(); ctx.setLineDash([]);
+  }
+}
+function tag(t, x, y) {
+  ctx.font = '12px ui-monospace, Menlo, monospace';
+  const tw = ctx.measureText(t).width + 10;
+  x = Math.min(x, cw - tw - 4); y = Math.min(y, ch - 22);
+  ctx.fillStyle = 'rgba(0,0,0,.75)'; ctx.fillRect(x, y, tw, 18);
+  ctx.fillStyle = '#fff'; ctx.fillText(t, x + 5, y + 13);
+}
+
+function hitHandle(p) {
+  const d = selD(); if (!d || LOCKED) return null;
+  const hp = handlePts(d.bbox);
+  for (const h of HANDLES) if (Math.abs(p.x - hp[h][0]) <= 7 && Math.abs(p.y - hp[h][1]) <= 7) return h;
+  return null;
+}
+function hitBox(ip) {
+  if (!S.showBoxes) return null;
+  let best = null, area = Infinity;
+  const tol = 4 / S.view.s;
+  for (const d of S.defects) {
+    const b = d.bbox;
+    if (ip.x >= b.x - tol && ip.x <= b.x + b.w + tol && ip.y >= b.y - tol && ip.y <= b.y + b.h + tol) {
+      if (b.w * b.h < area) { area = b.w * b.h; best = d; }
+    }
+  }
+  return best;
+}
+const CURSOR = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize' };
+function updateCursor(p) {
+  if (drag) return;
+  if (LOCKED) { cv.style.cursor = 'default'; return; }
+  const h = hitHandle(p); if (h) { cv.style.cursor = CURSOR[h]; return; }
+  cv.style.cursor = hitBox(toImg(p)) ? 'move' : 'crosshair';
+}
+const evtPt = (e) => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+
+cv.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || LOCKED) return;
+  cv.setPointerCapture(e.pointerId);
+  const p = evtPt(e), ip = toImg(p);
+  const h = hitHandle(p);
+  if (h) { drag = { type: 'resize', h, ip, orig: corners(selD().bbox), before: snap() }; return; }
+  const d = hitBox(ip);
+  if (d) { S.sel = d.id; drag = { type: 'move', ip, orig: { ...d.bbox }, before: snap() }; renderAll(); return; }
+  if (S.sel) { S.sel = null; renderAll(); }
+  const c = clampPt(ip);
+  drag = { type: 'draw', c: { x1: c.x, y1: c.y, x2: c.x, y2: c.y } };   // 空白處拖曳 → 畫新框
+});
+cv.addEventListener('pointermove', (e) => {
+  const p = evtPt(e), ip = toImg(p);
+  S.cursor = p;
+  $('sbXY').textContent = ip.x >= 0 && ip.y >= 0 && ip.x <= W && ip.y <= H ? `x ${Math.floor(ip.x)}, y ${Math.floor(ip.y)}` : '—';
+  if (!drag) { S.hover = hitBox(ip)?.id || null; updateCursor(p); draw(); return; }
+  if (drag.type === 'draw') {
+    const c = clampPt(ip); drag.c.x2 = c.x; drag.c.y2 = c.y;
+  } else if (drag.type === 'move') {
+    const o = drag.orig;
+    selD().bbox = clampXYWH({ x: o.x + ip.x - drag.ip.x, y: o.y + ip.y - drag.ip.y, w: o.w, h: o.h });
+  } else if (drag.type === 'resize') {
+    const c = { ...drag.orig }, dx = ip.x - drag.ip.x, dy = ip.y - drag.ip.y, h = drag.h;
+    if (h.includes('w')) c.x1 += dx; if (h.includes('e')) c.x2 += dx;
+    if (h.includes('n')) c.y1 += dy; if (h.includes('s')) c.y2 += dy;
+    const b = fromCorners(c); b.w = Math.max(1, b.w); b.h = Math.max(1, b.h);
+    selD().bbox = clampXYWH(b);
+  }
+  draw();
+});
+cv.addEventListener('pointerup', () => {
+  if (!drag) return;
+  const dg = drag; drag = null;
+  if (dg.type === 'draw') {
+    const b = fromCorners(dg.c);
+    if (b.w >= 2 && b.h >= 2) {
+      const before = snap();
+      const nd = { id: uid(), class_id: S.cls, bbox: b, attributes: {}, source: 'human' };
+      S.defects.push(nd); S.sel = nd.id;
+      commit(before);
+    } else draw();
+  } else commit(dg.before);
+  if (S.cursor) updateCursor(S.cursor);
+});
+cv.addEventListener('pointerleave', () => { S.cursor = null; S.hover = null; $('sbXY').textContent = '—'; draw(); });
+
+
+/* ================= 快捷鍵 ================= */
+document.addEventListener('keydown', (e) => {
+  if ($('dlg').classList.contains('show')) { if (e.key === 'Escape') closeDialog(); return; }
+  const tg = e.target.tagName;
+  if (tg === 'INPUT' || tg === 'SELECT' || tg === 'TEXTAREA') return;
+  const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+  if (mod && k === 's') { e.preventDefault(); save(); return; }
+  if (mod && e.key === 'Enter') { e.preventDefault(); if (nextItem) save(() => go(nextItem)); return; }
+  if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && k === 'y') { e.preventDefault(); redo(); return; }
+  if (mod) return;
+  const d = selD();
+  if (e.key === '/') { e.preventDefault(); $('clsCombo')?.querySelector('input')?.focus(); return; }
+  if (/^[1-8]$/.test(e.key) && RECENT[+e.key - 1] != null) { pickClass(RECENT[+e.key - 1]); return; }
+  if (d && !LOCKED && e.key.startsWith('Arrow')) {
+    e.preventDefault();
+    const st = e.shiftKey ? 10 : 1;
+    const dx = e.key === 'ArrowLeft' ? -st : e.key === 'ArrowRight' ? st : 0, dy = e.key === 'ArrowUp' ? -st : e.key === 'ArrowDown' ? st : 0;
+    mutate(() => { d.bbox = clampXYWH({ ...d.bbox, x: d.bbox.x + dx, y: d.bbox.y + dy }); });
+    return;
+  }
+  switch (e.key) {
+    case 'Delete': case 'Backspace': if (d) mutate(() => { S.defects = S.defects.filter(x => x !== d); S.sel = null; }); break;
+    case 'Tab': {
+      e.preventDefault(); if (!S.defects.length) break;
+      const i = S.defects.indexOf(d), n = S.defects.length;
+      S.sel = S.defects[((i < 0 ? -1 : i) + (e.shiftKey ? n - 1 : 1)) % n].id; renderAll(); break;
+    }
+    case 'Escape': if (drag && drag.type === 'draw') { drag = null; draw(); } else if (S.sel) { S.sel = null; renderAll(); } break;
+    case 'a': case 'A': case 'ArrowLeft': go(prevItem); break;
+    case 'd': case 'D': case 'ArrowRight': go(nextItem); break;
+  }
+});
+
+/* ================= 對話框 ================= */
+function showDialog(title, msg, buttons) {
+  $('dlgBox').innerHTML = `<h4>${title}</h4><p>${msg}</p><div class="foot">${buttons.map((b, i) =>
+    `<button class="btn ${b.primary ? 'btn-primary' : b.danger ? 'btn-danger-ghost' : 'btn-ghost'}" data-i="${i}">${b.label}</button>`).join('')}</div>`;
+  $('dlgBox').querySelectorAll('button').forEach(el => el.onclick = () => { closeDialog(); buttons[+el.dataset.i].fn?.(); });
+  $('dlg').classList.add('show');
+}
+function closeDialog() { $('dlg').classList.remove('show'); }
+$('dlg').onclick = (e) => { if (e.target.id === 'dlg') closeDialog(); };
+
+/* ================= 整體重繪 ================= */
+function renderAll() {
+  renderMode(); renderSide(); draw();
+  $('sbVer').textContent = `v${S.version}`
+    + (S.annotated_by ? ` · 框圖 ${S.annotated_by} ${S.annotated_at}` : '')
+    + (S.updated_by ? ` · 修改 ${S.updated_by} ${S.updated_at}` : '');
+  $('sbDirty').innerHTML = isDirty() ? '<span class="dirty">● 尚未儲存</span>' : '已儲存';
+}
+
+new ResizeObserver(() => layoutCanvas()).observe(stage);
+const boxId = params.get('box');
+if (boxId && S.defects.some(x => x.id === boxId)) S.sel = boxId;   // 從缺點檢視頁進來：預先選取該框
+renderAll();
+</script>
+</body>
+</html>

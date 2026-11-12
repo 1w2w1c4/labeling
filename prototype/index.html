@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Defect Labeler 原型</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  main { max-width: 880px; margin: 0 auto; padding: 64px 16px 48px; }
+  h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: .2px; }
+  .sub { color: var(--muted); margin: 0 0 36px; }
+  .grid { display: grid; grid-template-columns: 3fr 2fr; gap: 20px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } main { padding-top: 32px; } }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: var(--shadow); padding: 24px;
+  }
+  .card h2 { font-size: 17px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  .card p.hint { color: var(--muted); font-size: 13.5px; margin: 0 0 18px; }
+  .step {
+    width: 22px; height: 22px; border-radius: 6px; background: var(--primary-soft); color: var(--primary);
+    display: inline-grid; place-items: center; font-size: 12px;
+  }
+
+  .lot-form { display: flex; gap: 10px; }
+  .lot-form .btn { height: 44px; }
+  .lot-input {
+    flex: 1; min-width: 0; height: 44px; padding: 0 14px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--surface-2); font-size: 16px; letter-spacing: .5px;
+    outline: none; transition: border-color .15s, box-shadow .15s;
+  }
+  .lot-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+  .lot-input.valid { border-color: var(--ok); }
+  .lot-input.err { border-color: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+
+  .fmt-hint { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+  .fmt-hint.ok { color: var(--ok); }
+  .fmt-hint.bad { color: var(--danger); }
+  .msg { margin-top: 12px; font-size: 13.5px; display: none; padding: 10px 12px; border-radius: 8px; }
+  .msg.show { display: block; }
+  .msg.error { background: var(--danger-soft); color: var(--danger); }
+
+  a.stats-card {
+    text-decoration: none; color: inherit; display: flex; flex-direction: column; cursor: pointer;
+    transition: border-color .15s, transform .15s;
+  }
+  a.stats-card:hover { border-color: var(--primary); transform: translateY(-1px); }
+  .mini-bars { display: flex; align-items: flex-end; gap: 6px; height: 64px; margin: 6px 0 16px; }
+  .mini-bars span { flex: 1; border-radius: 3px 3px 0 0; background: var(--primary); opacity: .85; }
+  .mini-bars span:nth-child(n+4) { opacity: .45; }
+  .go { margin-top: auto; color: var(--primary); font-weight: 600; font-size: 14px; }
+
+  .backdrop {
+    position: fixed; inset: 0; background: rgba(10,12,16,.45); display: none;
+    align-items: center; justify-content: center; padding: 16px; z-index: 10;
+  }
+  .backdrop.show { display: flex; }
+  .modal {
+    width: 100%; max-width: 480px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,.25); overflow: hidden;
+  }
+  .modal-head { padding: 20px 24px 0; }
+  .modal-head .lot-name { font-size: 22px; font-weight: 700; margin-right: 8px; }
+  .modal-body { padding: 16px 24px 4px; }
+  .kv { display: grid; grid-template-columns: 110px 1fr; row-gap: 8px; font-size: 14px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; }
+  .big { font-size: 28px; font-weight: 700; }
+  .modal .progress { margin: 6px 0 4px; }
+  .legend { display: flex; gap: 14px; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+  .note { font-size: 13px; color: var(--muted); background: var(--surface-2); border-radius: 8px; padding: 10px 12px; margin-top: 14px; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 18px 24px 22px; flex-wrap: wrap; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px 16px; }
+</style>
+</head>
+<body>
+
+<header class="app"></header>
+
+<main>
+  <h1>開始工作</h1>
+  <p class="sub">輸入 Lot 編號開始標註，或先查看缺點分布統計再修正。</p>
+
+  <div class="grid">
+    <section class="card">
+      <h2><span class="step">1</span>輸入 Lot</h2>
+      <p class="hint">系統會先查詢圖片數量，確認後才開啟。</p>
+      <form class="lot-form" id="lotForm" autocomplete="off">
+        <input class="lot-input mono" id="lotInput" placeholder="xxxxxx-xx-xx" maxlength="12" autofocus>
+        <button class="btn btn-primary" id="lookupBtn" type="submit" disabled>查詢</button>
+      </form>
+      <div class="fmt-hint" id="fmtHint">格式：<span class="mono">xxxxxx-xx-xx</span>（英數字，輸入時自動補上 -）</div>
+      <div class="msg error" id="errMsg"></div>
+    </section>
+
+    <a class="card stats-card" href="#/stats" onclick="toast('前往 /stats 缺點分布統計（尚未製作）');return false;">
+      <h2><span class="step">2</span>缺點分布統計</h2>
+      <p class="hint" style="margin-bottom:4px">各缺點類別的框數與圖片數、可疑框檢查，點進類別可直接檢視與批次修正。</p>
+      <div class="mini-bars" aria-hidden="true">
+        <span style="height:92%"></span><span style="height:70%"></span><span style="height:52%"></span>
+        <span style="height:34%"></span><span style="height:22%"></span><span style="height:12%"></span>
+      </div>
+      <span class="go">查看統計 →</span>
+    </a>
+  </div>
+</main>
+
+<footer>可點擊原型 · 資料皆為假資料</footer>
+
+<div class="backdrop" id="modal">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <div style="color:var(--muted);font-size:13px">Lot</div>
+      <div><span class="lot-name mono" id="mLot"></span><span class="badge" id="mBadge"></span></div>
+    </div>
+    <div class="modal-body" id="mBody"></div>
+    <div class="modal-foot" id="mFoot"></div>
+  </div>
+</div>
+
+<script src="common.js"></script>
+<script>
+  renderHeader();
+
+  const input = $('lotInput'), btn = $('lookupBtn'), err = $('errMsg'), hint = $('fmtHint');
+  const HINT_DEFAULT = hint.innerHTML;
+
+  // 只保留英數字，依 6-2-2 自動補上 -
+  function autoFormat(raw) {
+    const s = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    return [s.slice(0, 6), s.slice(6, 8), s.slice(8, 10)].filter(Boolean).join('-');
+  }
+  function refreshValidity() {
+    const ok = LOT_RE.test(input.value);
+    btn.disabled = !ok;
+    input.classList.toggle('valid', ok);
+    hint.classList.toggle('ok', ok);
+    hint.classList.remove('bad');
+    hint.innerHTML = ok ? '✓ 格式正確' : HINT_DEFAULT;
+  }
+  input.oninput = (e) => {
+    if (e.inputType && e.inputType.startsWith('delete')) input.value = input.value.toUpperCase();
+    else input.value = autoFormat(input.value);
+    input.classList.remove('err'); err.classList.remove('show');
+    refreshValidity();
+  };
+  $('lotForm').onsubmit = (e) => { e.preventDefault(); lookup(); };
+
+  function lookup() {
+    const lot = input.value.trim().toUpperCase();
+    if (!lot) { showErr('請輸入 Lot 編號'); return; }
+    if (!LOT_RE.test(lot)) {
+      showErr(`「${lot}」格式不正確，Lot 必須是 xxxxxx-xx-xx（6 碼-2 碼-2 碼英數字）。`);
+      hint.classList.add('bad'); hint.classList.remove('ok');
+      return;
+    }
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>查詢中';
+    setTimeout(() => {
+      btn.disabled = false; btn.textContent = '查詢';
+      const d = getLot(lot);
+      if (!d) { showErr(`找不到 Lot「${lot}」，請確認編號是否正確。`); return; }
+      openModal(lot, d);
+    }, 600);
+  }
+  function showErr(t) { err.textContent = t; err.classList.add('show'); input.classList.add('err'); input.focus(); }
+
+  function openModal(lot, d) {
+    $('mLot').textContent = lot;
+    const badge = $('mBadge');
+    if (d.status === 'new') { badge.className = 'badge b-orange'; badge.textContent = '尚未開啟'; }
+    else if (d.status === 'open') { badge.className = 'badge b-green'; badge.textContent = '已開啟'; }
+    else { badge.className = 'badge b-blue'; badge.textContent = '標註中'; }
+
+    const base = `
+      <dl class="kv">
+        <dt>圖片數量</dt><dd><span class="big">${fmt(d.count)}</span> 張</dd>
+        <dt>產品 / 站點</dt><dd>${d.product} · ${d.station}</dd>
+        <dt>資料來源</dt><dd>${d.source}</dd>
+      </dl>`;
+
+    if (d.status === 'new') {
+      $('mBody').innerHTML = base + `
+        <div class="note">開啟後會為每張圖建立標註紀錄（每批 1,000 筆），${fmt(d.count)} 張約需數秒。重複開啟不會產生重複資料。</div>
+        <div id="initArea" style="display:none;margin-top:14px">
+          <div style="font-size:13px;color:var(--muted)">初始化中… <span id="initTxt">0</span> / ${fmt(d.count)}</div>
+          <div class="progress" style="margin-top:6px"><div id="initBar" style="width:0;background:var(--primary)"></div></div>
+        </div>`;
+      $('mFoot').innerHTML = `
+        <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" id="openBtn">開啟 Lot</button>`;
+      $('openBtn').onclick = () => initLot(lot, d);
+    } else {
+      const p = (n) => (n / d.count * 100) + '%';
+      $('mBody').innerHTML = base + `
+        <dl class="kv" style="margin-top:8px">
+          <dt>標註進度</dt>
+          <dd>
+            ${fmt(d.done)} / ${fmt(d.count)}（${(d.done / d.count * 100).toFixed(1)}%）
+            <div class="progress">
+              <div style="width:${p(d.ng)};background:var(--danger)"></div>
+              <div style="width:${p(d.ok)};background:var(--ok)"></div>
+            </div>
+            <div class="legend">
+              <span><i class="dot" style="background:var(--danger)"></i>NG ${fmt(d.ng)}</span>
+              <span><i class="dot" style="background:var(--ok)"></i>OK ${fmt(d.ok)}</span>
+              <span><i class="dot" style="background:var(--border)"></i>未標 ${fmt(d.count - d.done)}</span>
+            </div>
+          </dd>
+          <dt>線上人數</dt><dd>${d.online} 人正在標註此 Lot</dd>
+        </dl>`;
+      $('mFoot').innerHTML = `
+        <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+        <a class="btn btn-ghost" href="lot.html?lot=${encodeURIComponent(lot)}">看圖片清單</a>
+        <a class="btn btn-primary" href="lot.html?lot=${encodeURIComponent(lot)}&queue=1">開始標註</a>`;
+    }
+    $('modal').classList.add('show');
+  }
+
+  function initLot(lot, d) {
+    const ob = $('openBtn'); ob.disabled = true; ob.innerHTML = '<span class="spinner"></span>初始化中';
+    $('initArea').style.display = 'block';
+    let n = 0;
+    const t = setInterval(() => {
+      n = Math.min(d.count, n + 1000);
+      $('initTxt').textContent = fmt(n);
+      $('initBar').style.width = (n / d.count * 100) + '%';
+      if (n >= d.count) {
+        clearInterval(t);
+        markOpened(lot);
+        setTimeout(() => openModal(lot, getLot(lot)), 300);
+      }
+    }, 180);
+  }
+
+  function closeModal() { $('modal').classList.remove('show'); }
+  $('modal').onclick = (e) => { if (e.target.id === 'modal') closeModal(); };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+</script>
+</body>
+</html>
