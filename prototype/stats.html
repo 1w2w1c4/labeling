@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>缺點分布統計</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  .page { max-width: 1280px; margin: 0 auto; padding: 16px 20px 48px; }
+  @media (max-width: 640px) { .page { padding: 12px 16px 32px; } }
+  .crumb { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+  .crumb a { color: var(--muted); text-decoration: none; }
+  .crumb a:hover { color: var(--primary); }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+  section.panel { padding: 18px 20px; margin-top: 14px; }
+  @media (max-width: 640px) { section.panel { padding: 16px; } }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sec-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* 範圍 */
+  .scope { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .cache { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .btn-sm { height: 32px; padding: 0 12px; font-size: 13px; border-radius: 8px; }
+
+  /* 總覽 */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  .kpi { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .kpi .k { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .kpi .v { font-size: 24px; font-weight: 700; margin-top: 2px; }
+  .kpi .s { font-size: 12px; color: var(--muted); }
+  .overview .progress { margin-top: 14px; }
+
+
+  /* 各類別分布圖（橫條圖） */
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .seg button { border: 0; background: none; padding: 5px 14px; font-size: 13px; cursor: pointer; color: var(--muted); }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+  .dist { display: flex; flex-direction: column; gap: 2px; }
+  .drow {
+    display: grid; grid-template-columns: 190px 1fr 96px; gap: 12px; align-items: center;
+    padding: 3px 6px; border-radius: 6px; cursor: pointer;
+  }
+  .drow:hover { background: var(--surface-2); }
+  .drow.zero { cursor: default; }
+  .drow:hover .fill { filter: brightness(1.12); }
+  .imgs { position: relative; text-align: right; font-size: 12.5px; white-space: nowrap; }
+  .imgs a { text-decoration: none; font-weight: 600; }
+  .imgs a:hover { text-decoration: underline; }
+  .imgs .none { color: var(--muted); }
+  .cname { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 13px; }
+  .cname .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .cname .dn { white-space: nowrap; }
+  .cname .en { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cname .badge { font-size: 10.5px; padding: 0 6px; }
+  .track { position: relative; height: 18px; margin-right: 60px; }
+  .fill { position: absolute; left: 0; top: 2px; height: 14px; border-radius: 0 4px 4px 0; background: var(--primary); }
+  .val { position: absolute; top: 0; line-height: 18px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .axis { display: grid; grid-template-columns: 190px 1fr 96px; gap: 12px; padding: 0 6px; margin-bottom: 6px; }
+  .axis .ticks { position: relative; height: 16px; margin-right: 60px; }
+  .axis .ticks span { position: absolute; bottom: 2px; transform: translateX(-50%); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .axis .ticks span:first-child { transform: none; }
+  @media (max-width: 640px) {
+    .drow, .axis { grid-template-columns: 110px 1fr 74px; gap: 8px; }
+    .cname .en { display: none; }
+  }
+
+  .tip {
+    position: fixed; z-index: 60; pointer-events: none; background: var(--text); color: var(--bg);
+    font-size: 12.5px; padding: 6px 10px; border-radius: 8px; white-space: nowrap; display: none;
+    box-shadow: 0 6px 20px rgba(0,0,0,.25);
+  }
+  .empty { text-align: center; padding: 72px 16px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header class="app"></header>
+
+<div class="page">
+  <nav class="crumb"><a href="index.html">主頁</a> › 缺點分布統計</nav>
+  <div id="content"></div>
+</div>
+<div class="tip" id="tip"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<script src="common.js"></script>
+<script>
+renderHeader();
+
+/* ---------- 統計範圍：全部已開啟的 Lot（URL 只記切換：?by=boxes|images） ---------- */
+const params = new URLSearchParams(location.search);
+const OPEN_LOTS = Object.keys(LOTS).filter(k => getLot(k).status !== 'new');
+const selLots = OPEN_LOTS;
+let by = params.get('by') === 'images' ? 'images' : 'boxes';
+
+const itemCache = {};
+const itemsOf = (lot) => itemCache[lot] ||= genItems(lot, getLot(lot));
+
+function syncUrl() {
+  const q = new URLSearchParams();
+  if (by === 'images') q.set('by', 'images');
+  history.replaceState(null, '', q.toString() ? '?' + q.toString() : location.pathname);
+}
+
+/* ---------- 計算（正式版由 GET /stats 回傳，結果快取 60 秒） ---------- */
+function compute() {
+  const S = { images: 0, ng: 0, ok: 0, none: 0, boxes: 0,
+              cls: CLASSES.map(() => ({ boxes: 0, images: 0 })) };
+  for (const lot of selLots) for (const it of itemsOf(lot)) {
+    S.images++;
+    if (it.verdict === 'NG') S.ng++; else if (it.verdict === 'OK') S.ok++; else S.none++;
+    S.boxes += it.defects.length;
+    for (const c of it.classes) S.cls[c].images++;
+    for (const d of it.defects) S.cls[d.class_id].boxes++;
+  }
+  return S;
+}
+
+/* ---------- 畫面 ---------- */
+let S;
+function render() {
+  if (!OPEN_LOTS.length) {
+    $('content').innerHTML = `<div class="panel empty"><div style="font-size:16px;color:var(--text)">目前沒有已開啟的 Lot，沒有可統計的資料。</div>
+      <a class="btn btn-primary" href="index.html" style="margin-top:14px">回主頁</a></div>`;
+    return;
+  }
+  S = compute();
+  const t = new Date(), p2 = (n) => String(n).padStart(2, '0');
+  const done = S.ng + S.ok, pct = (n, d) => d ? (n / d * 100).toFixed(1) + '%' : '—';
+
+  $('content').innerHTML = `
+  <section class="panel" style="margin-top:0">
+    <div class="scope">
+      <div>
+        <h1>缺點分布統計</h1>
+        <div class="hint" style="margin-top:4px">統計範圍：全部已開啟的 Lot（${selLots.length} 個）</div>
+      </div>
+      <div class="cache">統計結果快取 60 秒 · 更新於 ${p2(t.getHours())}:${p2(t.getMinutes())}:${p2(t.getSeconds())}
+        <button class="btn btn-ghost btn-sm" id="refresh">重新整理</button></div>
+    </div>
+  </section>
+
+  <section class="panel overview">
+    <div class="sec-head"><h2>總覽</h2></div>
+    <div class="kpis">
+      <div class="kpi"><div class="k">圖片數</div><div class="v num">${fmt(S.images)}</div><div class="s">${selLots.length} 個 Lot</div></div>
+      <div class="kpi"><div class="k">已標註</div><div class="v num">${fmt(done)}</div><div class="s">${pct(done, S.images)}</div></div>
+      <div class="kpi"><div class="k"><i class="dot" style="background:var(--danger)"></i>NG</div><div class="v num">${fmt(S.ng)}</div><div class="s">已標註的 ${pct(S.ng, done)}</div></div>
+      <div class="kpi"><div class="k"><i class="dot" style="background:var(--ok)"></i>OK</div><div class="v num">${fmt(S.ok)}</div><div class="s">已標註的 ${pct(S.ok, done)}</div></div>
+      <div class="kpi"><div class="k"><i class="dot" style="background:var(--border)"></i>未標註</div><div class="v num">${fmt(S.none)}</div><div class="s">${pct(S.none, S.images)}</div></div>
+      <div class="kpi"><div class="k">框數</div><div class="v num">${fmt(S.boxes)}</div><div class="s">每張 NG 平均 ${S.ng ? (S.boxes / S.ng).toFixed(2) : '—'} 個</div></div>
+    </div>
+    <div class="progress">
+      <div style="width:${S.ng / S.images * 100}%;background:var(--danger)"></div>
+      <div style="width:${S.ok / S.images * 100}%;background:var(--ok)"></div>
+    </div>
+  </section>
+
+
+  <section class="panel">
+    <div class="sec-head">
+      <h2>各類別分布</h2>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="hint">點類別看框過該缺點的圖</span>
+        <div class="seg" id="bySeg">
+          <button data-by="boxes" class="${by === 'boxes' ? 'on' : ''}">框數</button>
+          <button data-by="images" class="${by === 'images' ? 'on' : ''}">圖片數</button>
+        </div>
+      </div>
+    </div>
+    <div id="dist"></div>
+  </section>`;
+
+  $('refresh').onclick = () => { toast('已重新計算（正式版會略過 60 秒快取）'); render(); };
+  document.querySelectorAll('[data-by]').forEach(b => b.onclick = () => {
+    by = b.dataset.by; syncUrl();
+    document.querySelectorAll('[data-by]').forEach(x => x.classList.toggle('on', x === b));
+    renderDist();
+  });
+  renderDist();
+}
+
+// 刻度：取 1/2/5 × 10^n 的整齊間距
+function niceTicks(max) {
+  if (max <= 0) return [0];
+  const raw = max / 4, mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 5, 10].map(m => m * mag).find(s => s >= raw);
+  const out = []; for (let v = 0; v <= max + 1e-9; v += step) out.push(v);
+  if (out[out.length - 1] < max) out.push(out[out.length - 1] + step);
+  return out;
+}
+
+function renderDist() {
+  const rows = CLASSES.map(c => ({ c, boxes: S.cls[c.id].boxes, images: S.cls[c.id].images }))
+    .sort((a, b) => b[by] - a[by] || a.c.id - b.c.id);
+  const ticks = niceTicks(Math.max(...rows.map(r => r[by])));
+  const top = ticks[ticks.length - 1] || 1;
+  const unit = by === 'boxes' ? '個框' : '張';
+  const x = (v) => (v / top * 100) + '%';
+
+  $('dist').innerHTML = `
+    <div class="axis"><span></span><div class="ticks">${ticks.map(v => `<span style="left:${x(v)}">${fmt(v)}</span>`).join('')}</div><span></span></div>
+    <div class="dist">
+      ${rows.map(r => `
+        <div class="drow ${r.images ? '' : 'zero'}" data-cls="${r.c.id}"
+           data-tip="${esc(r.c.display)}（${r.c.name}）：${fmt(r.boxes)} 個框、${fmt(r.images)} 張圖">
+          <span class="cname"><span class="sw" style="background:${r.c.color}"></span><span class="dn">${esc(r.c.display)}</span>
+            <span class="en mono">${r.c.name}</span>${r.c.active ? '' : '<span class="badge b-gray">停用</span>'}</span>
+          <span class="track"><span class="fill" style="width:${x(r[by])}"></span><span class="val" style="left:calc(${x(r[by])} + 6px)">${fmt(r[by])}</span></span>
+          <span class="imgs">${imgLink(r.c)}</span>
+        </div>`).join('')}
+    </div>
+    <div class="hint" style="margin-top:10px">依${by === 'boxes' ? '框數' : '圖片數'}排序，單位：${unit}；滑鼠移到類別上可看框數與圖片數；點類別或「看 N 張」會列出全部 Lot 中框過該缺點的圖</div>`;
+
+  $('dist').querySelectorAll('.drow').forEach(row => row.onclick = (e) => {
+    if (e.target.closest('.imgs')) return;
+    // 點整列也一樣打開類別圖片清單
+    if (S.cls[+row.dataset.cls].images) location.href = 'images.html?class_id=' + row.dataset.cls;
+  });
+}
+
+// 「看圖片」連結：跨全部 Lot，列出框過該類別的所有圖
+function imgLink(c) {
+  const n = S.cls[c.id].images;
+  if (!n) return '<span class="none">沒有圖片</span>';
+  return `<a href="images.html?class_id=${c.id}" title="列出全部 Lot 中框過「${esc(c.display)}」的圖">看 ${fmt(n)} 張 →</a>`;
+}
+
+/* ---------- 滑鼠提示 ---------- */
+const tip = $('tip');
+document.addEventListener('mousemove', (e) => {
+  const el = e.target.closest('[data-tip]');
+  if (!el) { tip.style.display = 'none'; return; }
+  tip.textContent = el.dataset.tip; tip.style.display = 'block';
+  const r = tip.getBoundingClientRect();
+  let x = e.clientX + 12, y = e.clientY - r.height - 10;
+  if (x + r.width > innerWidth - 8) x = e.clientX - r.width - 12;
+  if (y < 8) y = e.clientY + 16;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+});
+
+syncUrl();
+render();
+</script>
+</body>
+</html>

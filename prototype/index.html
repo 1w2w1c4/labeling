@@ -94,9 +94,9 @@
       <div class="msg error" id="errMsg"></div>
     </section>
 
-    <a class="card stats-card" href="#/stats" onclick="toast('前往 /stats 缺點分布統計（尚未製作）');return false;">
+    <a class="card stats-card" href="stats.html">
       <h2><span class="step">2</span>缺點分布統計</h2>
-      <p class="hint" style="margin-bottom:4px">各缺點類別的框數與圖片數、可疑框檢查，點進類別可直接檢視與批次修正。</p>
+      <p class="hint" style="margin-bottom:4px">各缺點類別的框數與圖片數分布，點進類別可看框過該缺點的所有圖。</p>
       <div class="mini-bars" aria-hidden="true">
         <span style="height:92%"></span><span style="height:70%"></span><span style="height:52%"></span>
         <span style="height:34%"></span><span style="height:22%"></span><span style="height:12%"></span>
@@ -119,6 +119,7 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
 <script src="common.js"></script>
 <script>
   renderHeader();
@@ -218,6 +219,7 @@
   }
 
   function initLot(lot, d) {
+    if (!can('open_lot')) { toast('你沒有開啟 Lot 的權限（users.yaml）'); return; }
     const ob = $('openBtn'); ob.disabled = true; ob.innerHTML = '<span class="spinner"></span>初始化中';
     $('initArea').style.display = 'block';
     let n = 0;

@@ -1,7 +1,33 @@
 // ===== 共用假資料與工具（原型用） =====
 
-// 目前登入的使用者（原型固定；正式版由 JWT 取得，框圖人員與時間由後端寫入）
-const CURRENT_USER = 'weichun';
+// ===== 設定檔：直接讀正式版的 YAML（只要改 YAML，不用改這裡） =====
+// 瀏覽器不允許 file:// 讀本機檔案，所以原型要透過本機伺服器開啟（見 CLAUDE.md 第 12 節）
+const CONFIG_DIR = '../defect-labeler/backend/config/';
+const CONFIG_ERRORS = [];
+function loadYaml(file) {
+  try {
+    const x = new XMLHttpRequest();
+    x.open('GET', CONFIG_DIR + file + '?t=' + Date.now(), false);   // 同步讀取：頁面一載入就要用到
+    x.send();
+    if (x.status !== 200) throw new Error('HTTP ' + x.status);
+    return jsyaml.load(x.responseText);
+  } catch (e) {
+    CONFIG_ERRORS.push(`${file}：${location.protocol === 'file:' ? '無法以 file:// 讀取，請用本機伺服器開啟' : e.message}`);
+    return null;
+  }
+}
+const CFG_USERS = loadYaml('users.yaml') || {};
+const CFG_CLASSES = loadYaml('classes.yaml') || {};
+
+// ===== 使用者與權限（config/users.yaml） =====
+// 身分由外部取得（不做登入、也不做選擇頁面）；YAML 只管理每個人有哪些權限
+const ROLES = CFG_USERS.roles || {};
+const USERS = (CFG_USERS.users || []).map(u => ({ ...u, id: String(u.id), name: String(u.name ?? u.id), active: u.active !== false }));
+const userById = (id) => USERS.find(u => u.id === id) || null;
+// 原型：模擬外部傳來的身分（正式版由後端從外部來源取得）
+const EXTERNAL_USER_ID = 'weichun';
+function currentUser() { const u = userById(EXTERNAL_USER_ID); return u && u.active ? u : null; }
+function can(perm) { const u = currentUser(); return !!u && (ROLES[u.role] || []).includes(perm); }
 function nowStr() {
   const d = new Date(), p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
@@ -9,27 +35,33 @@ function nowStr() {
 
 const LOT_RE = /^[A-Z0-9]{6}-[A-Z0-9]{2}-[A-Z0-9]{2}$/;
 
-// class id 固定，永不重新排序；停用的保留位置。類別數量很多，選擇時用輸入搜尋
-const CLASS_DEFS = [
-  ['scratch', '刮傷', '#e5484d'], ['dent', '凹陷', '#f76b15'], ['stain', '髒污', '#e2a900'],
-  ['short', '短路', '#8e4ec6'], ['missing', '缺件', '#0090ff'], ['bubble', '氣泡', '#7c8594', false],
-  ['bridge', '錫橋', '#30a46c'], ['foreign', '異物'], ['open', '斷路'], ['shift', '偏移'],
-  ['lifted_lead', '翹腳'], ['insufficient_solder', '少錫'], ['excess_solder', '多錫'], ['solder_ball', '錫珠'],
-  ['cold_joint', '冷焊'], ['tombstone', '立碑'], ['polarity', '極性反'], ['wrong_part', '錯件'],
-  ['crack', '破損'], ['chipped', '缺角'], ['discolor', '變色'], ['oxidation', '氧化'],
-  ['pinhole', '針孔'], ['burr', '毛邊'], ['indent', '壓痕'], ['fingerprint', '指紋'],
-  ['water_mark', '水漬'], ['color_diff', '色差'], ['print_defect', '印刷不良'], ['blur_mark', '字元模糊'],
-  ['missing_print', '漏印'], ['mask_peel', '綠漆剝落'], ['exposed_copper', '露銅'], ['hole_offset', '孔偏'],
-  ['plugged_hole', '塞孔'], ['scuff', '刮花', null, false], ['spot', '污點'], ['line_scratch', '劃痕'],
-];
 function hslHex(h, s, l) {
   s /= 100; l /= 100;
   const f = (n) => { const k = (n + h / 30) % 12, c = l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1)); return Math.round(c * 255).toString(16).padStart(2, '0'); };
   return '#' + f(0) + f(8) + f(4);
 }
-const CLASSES = CLASS_DEFS.map(([name, display, color, active], id) => ({
-  id, name, display, color: color || hslHex((id * 137.5) % 360, 62, 50), active: active !== false,
-}));
+// ===== 缺點類別（config/classes.yaml） =====
+// class id 固定，永不重新排序；停用的保留位置。陣列索引 = id，所以 id 必須從 0 連續
+const CLASSES = (() => {
+  const list = (CFG_CLASSES.classes || []).map(c => ({
+    id: +c.id, name: String(c.name), display: String(c.display ?? c.name),
+    color: c.color || hslHex((+c.id * 137.5) % 360, 62, 50), active: c.active !== false,
+  })).sort((a, b) => a.id - b.id);
+  list.forEach((c, i) => { if (c.id !== i) CONFIG_ERRORS.push(`classes.yaml：id 必須從 0 連續且不重複（第 ${i + 1} 筆是 ${c.id}）`); });
+  if (CFG_CLASSES.classes && !list.length) CONFIG_ERRORS.push('classes.yaml：沒有任何類別');
+  return list;
+})();
+for (const u of USERS) if (!ROLES[u.role]) CONFIG_ERRORS.push(`users.yaml：${u.id} 的角色「${u.role}」沒有定義在 roles`);
+
+// 設定檔有問題時整頁顯示錯誤（其他頁面腳本可能因此出錯，以這個訊息為準）
+if (CONFIG_ERRORS.length) {
+  console.error('設定檔錯誤', CONFIG_ERRORS);
+  addEventListener('DOMContentLoaded', () => {
+    document.body.innerHTML = `<div style="max-width:640px;margin:80px auto;padding:24px;font:15px/1.6 sans-serif;background:var(--surface);color:var(--text);border:1px solid var(--danger);border-radius:12px">
+      <b style="color:var(--danger)">設定檔讀取失敗</b><ul>${CONFIG_ERRORS.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
+      <div style="color:var(--muted);font-size:13px">請在 labelImg 資料夾執行 <code>python3 -m http.server 8000</code>，再開 <code>http://localhost:8000/prototype/</code></div></div>`;
+  });
+}
 // 搜尋：中文名稱、英文代碼、id 都可以；開頭符合的排前面
 function matchClass(c, q) {
   q = q.trim().toLowerCase();
@@ -111,12 +143,13 @@ function renderHeader() {
   h.innerHTML = `
     <div style="display:flex;align-items:center;gap:14px">
       <a class="brand" href="index.html"><div class="brand-mark"></div>Defect Labeler</a>
-      <span class="project-chip" onclick="toast('切換專案（尚未製作）')">專案：PCB 外觀檢 ▾</span>
+      <span class="project-title">AVI</span>
     </div>
     <div class="user">
       <button class="icon-btn" id="themeBtn" title="切換深淺色">◐</button>
-      <span class="uname">weichun · 審核者</span>
-      <div class="avatar">W</div>
+      ${(() => { const u = currentUser();
+        return u ? `<span class="uname">${esc(u.name)}</span><span class="avatar">${esc(u.name[0].toUpperCase())}</span>`
+                 : '<span class="uname">無權限</span><span class="avatar">?</span>'; })()}
     </div>`;
   try { const t = localStorage.getItem('dl_theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
   $('themeBtn').onclick = () => {
@@ -228,17 +261,15 @@ function genItems(LOT, lot) {
       verdict: verdict || 'none', status, defects,
       version: verdict ? 2 + (i % 4) : 1,
       captured,
-      // 整張圖一組：第一次儲存的框圖人員／時間；之後修改再記錄修改人員／時間
-      annotated_by: verdict ? annotator : null, annotated_at: verdict ? annotatedAt : null,
-      updated_by: modified ? LABELERS[(i + 2) % LABELERS.length] : null,
-      updated_at: modified ? `2026-11-12 ${String(8 + i % 4).padStart(2, '0')}:${String((i * 3) % 60).padStart(2, '0')}:00` : null,
+      // 整張圖只記一組：最後一次修改（儲存）的人員與時間，每次儲存覆寫
+      updated_by: !verdict ? null : modified ? LABELERS[(i + 2) % LABELERS.length] : annotator,
+      updated_at: !verdict ? null : modified ? `2026-11-12 ${String(8 + i % 4).padStart(2, '0')}:${String((i * 3) % 60).padStart(2, '0')}:00` : annotatedAt,
       thumb: Math.floor(rng() * 6),
       lockedBy: status === 'in_progress' && rng() < 0.5 ? LOCKERS[Math.floor(rng() * LOCKERS.length)] : null,
     };
     const e = edits[id];
     if (e) Object.assign(it, { defects: e.defects, verdict: e.verdict, version: e.version, status: e.status,
-                               annotated_by: e.annotated_by, annotated_at: e.annotated_at,
-                               updated_by: e.updated_by, updated_at: e.updated_at });
+                               updated_by: e.updated_by || e.annotated_by, updated_at: e.updated_at || e.annotated_at });
     return finalizeItem(it);
   });
 }

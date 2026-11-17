@@ -130,6 +130,7 @@
 
 <div class="backdrop" id="dlg"><div class="modal" id="dlgBox"></div></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
 <script src="common.js"></script>
 <script>
 renderHeader();
@@ -152,18 +153,31 @@ if (!item) {
 document.title = `${item.filename} · ${LOT}`;
 const W = lot.width, H = lot.height;   // 圖片固定 300 × 300
 
+// 從類別圖片清單（統計頁 → 看 N 張）進來：from=class，上一張／下一張跨全部 Lot、只在該類別內移動，回清單回到類別圖片清單
+const FROM_CLASS = params.get('from') === 'class' && filters.class_id !== '';
 // 上一張／下一張：只在目前篩選結果（或佇列：未標註且沒人鎖定）內移動
 const inSet = QUEUE ? (it) => it.verdict === 'none' && !it.lockedBy : (it) => matchFilters(it, filters);
-const setList = items.filter(inSet);
-const prevItem = [...setList].reverse().find(it => it.idx < item.idx) || null;
-const nextItem = setList.find(it => it.idx > item.idx) || null;
-const posInSet = setList.findIndex(it => it.id === item.id);
+let setList, prevItem, nextItem, posInSet;
+if (FROM_CLASS) {
+  const cid = +filters.class_id;
+  setList = Object.keys(LOTS).filter(l => getLot(l).status !== 'new')
+    .flatMap(l => (l === LOT ? items : genItems(l, getLot(l))).filter(it => it.classes.has(cid)).map(it => Object.assign(it, { lot: l })));
+  posInSet = setList.findIndex(it => it.lot === LOT && it.id === item.id);
+  prevItem = posInSet > 0 ? setList[posInSet - 1] : null;
+  nextItem = posInSet >= 0 ? setList[posInSet + 1] || null : setList[0] || null;
+} else {
+  setList = items.filter(inSet);
+  prevItem = [...setList].reverse().find(it => it.idx < item.idx) || null;
+  nextItem = setList.find(it => it.idx > item.idx) || null;
+  posInSet = setList.findIndex(it => it.id === item.id);
+}
 
 function urlFor(it) {
-  const q = new URLSearchParams(location.search); q.set('id', it.id); q.delete('box');
+  const q = new URLSearchParams(location.search); q.set('lot', it.lot || LOT); q.set('id', it.id); q.delete('box');
   return 'annotate.html?' + q.toString();
 }
 const listUrl = (() => {
+  if (FROM_CLASS) return 'images.html?class_id=' + encodeURIComponent(filters.class_id);
   const q = new URLSearchParams({ lot: LOT });
   if (!QUEUE) for (const k of FILTER_KEYS) if (filters[k]) q.set(k, filters[k]);
   return 'lot.html?' + q;
@@ -198,7 +212,7 @@ const S = {
   defects: clone(item.defects),
   explicit: '',
   version: item.version, status: item.status,
-  annotated_by: item.annotated_by, annotated_at: item.annotated_at, updated_by: item.updated_by, updated_at: item.updated_at,
+  updated_by: item.updated_by, updated_at: item.updated_at,
   undo: [], redo: [],
   showBoxes: true, showLabels: true,
   view: { s: 1, ox: 0, oy: 0 }, cursor: null,
@@ -223,13 +237,11 @@ $('app').innerHTML = `
     <div class="nav">
       <button class="btn btn-ghost" id="prevBtn" ${prevItem ? '' : 'disabled'} title="上一張（A）">‹ 上一張</button>
       <span>${QUEUE ? '佇列剩 ' + fmt(setList.length) + ' 張'
-        : (Object.values(filters).some(v => v) ? '篩選結果 ' : '全部 ') + (posInSet >= 0 ? fmt(posInSet + 1) : '–') + ' / ' + fmt(setList.length)}</span>
+        : (FROM_CLASS ? CLASSES[+filters.class_id].display + ' ' : Object.values(filters).some(v => v) ? '篩選結果 ' : '全部 ') + (posInSet >= 0 ? fmt(posInSet + 1) : '–') + ' / ' + fmt(setList.length)}</span>
       <button class="btn btn-ghost" id="nextBtn" ${nextItem ? '' : 'disabled'} title="下一張（D）">下一張 ›</button>
     </div>
     <span class="grow"></span>
     <div class="mode" id="mode"></div>
-    <span class="sep"></span>
-    <button class="btn btn-ghost btn-sm" onclick="toast('歷史版本頁（尚未製作）')">歷史紀錄</button>
   </div>
 
   <div class="work">
@@ -275,21 +287,17 @@ function revert() {
 /* ================= 儲存（樂觀鎖：帶 version） ================= */
 function save(after) {
   if (LOCKED) return;
-  if (!isDirty() && S.annotated_by) { if (after) after(); else toast('沒有需要儲存的修改'); return; }
+  if (!isDirty() && S.updated_by) { if (after) after(); else toast('沒有需要儲存的修改'); return; }
   const v = verdict();
-  // 整張圖記一組時間：第一次儲存寫框圖人員／時間，之後有修改再寫修改人員／時間
-  // （正式版由後端依登入者與伺服器時間寫入）
-  const by = CURRENT_USER, at = nowStr();
-  const first = !S.annotated_by;
-  if (first) { S.annotated_by = by; S.annotated_at = at; }
-  else { S.updated_by = by; S.updated_at = at; }
+  // 整張圖只記最後一次修改的人員與時間，每次儲存覆寫（正式版由後端依使用者與伺服器時間寫入）
+  if (!can('annotate')) { toast('你沒有框圖權限（users.yaml）'); return; }
+  const by = currentUser().name, at = nowStr();
+  S.updated_by = by; S.updated_at = at;
   S.version += 1;
-  if (S.status === 'approved') S.status = 'reopened';
-  else if (S.status === 'unassigned') S.status = 'in_progress';
   saveEdit(item.id, { defects: S.defects, verdict: v, version: S.version, status: S.status,
-    annotated_by: S.annotated_by, annotated_at: S.annotated_at, updated_by: S.updated_by, updated_at: S.updated_at });
+    updated_by: S.updated_by, updated_at: S.updated_at });
   saved = snap();
-  toast(`${first ? '已記錄框圖' : '已記錄修改'}：${by} · ${at}（v${S.version}）· 判定 ${VERDICT[v].label}${S.defects.length ? ' · ' + S.defects.length + ' 框' : ''}`);
+  toast(`已儲存：${by} · ${at}· 判定 ${VERDICT[v].label}${S.defects.length ? ' · ' + S.defects.length + ' 框' : ''}`);
   renderAll();
   if (after) setTimeout(after, 250);
 }
@@ -333,16 +341,14 @@ function redo() {
 function renderSide() {
   const dis = LOCKED ? 'disabled' : '';
   // 判定自動決定：有框為 NG、沒框為 OK；尚未標註且沒畫框時不比對
-  const v = S.defects.length ? 'NG' : (S.annotated_by ? 'OK' : 'none');
+  const v = S.defects.length ? 'NG' : (S.updated_by ? 'OK' : 'none');
   const cmp = computeAiCmp(v, item.ai, S.defects);
   const d = selD();
   const curId = d ? d.class_id : S.cls, cur = CLASSES[curId];
   $('side').innerHTML = `
-    <section class="sec rec" title="以整張圖為單位，儲存時記錄">
-      <span class="lbl">框圖</span>
-      <span>${S.annotated_by ? `<b>${esc(S.annotated_by)}</b><span class="t mono">${S.annotated_at}</span>` : '<span class="none">尚未框圖（儲存時記錄）</span>'}</span>
-      <span class="lbl">修改</span>
-      <span>${S.updated_by ? `<b>${esc(S.updated_by)}</b><span class="t mono">${S.updated_at}</span>` : '<span class="none">—</span>'}</span>
+    <section class="sec rec" title="以整張圖為單位，每次儲存覆寫為最後一次">
+      <span class="lbl">最後修改</span>
+      <span>${S.updated_by ? `<b>${esc(S.updated_by)}</b><span class="t mono">${S.updated_at}</span>` : '<span class="none">尚未儲存（儲存時記錄）</span>'}</span>
       <span class="lbl">AI</span>
       <span title="AI 分類結果（來源資料帶入，不可修改）"><b>${aiLabel(item.ai)}</b><span class="t mono">${item.aiScore.toFixed(2)}</span>
         ${cmp ? `<span class="badge" style="margin-left:8px;background:transparent;border:1px solid ${AI_CMP[cmp].color};color:${AI_CMP[cmp].color}" title="${AI_CMP[cmp].tip}">${AI_CMP[cmp].label}</span>` : ''}</span>
@@ -639,15 +645,13 @@ $('dlg').onclick = (e) => { if (e.target.id === 'dlg') closeDialog(); };
 /* ================= 整體重繪 ================= */
 function renderAll() {
   renderMode(); renderSide(); draw();
-  $('sbVer').textContent = `v${S.version}`
-    + (S.annotated_by ? ` · 框圖 ${S.annotated_by} ${S.annotated_at}` : '')
-    + (S.updated_by ? ` · 修改 ${S.updated_by} ${S.updated_at}` : '');
+  $('sbVer').textContent = S.updated_by ? `最後修改 ${S.updated_by} ${S.updated_at}` : '';
   $('sbDirty').innerHTML = isDirty() ? '<span class="dirty">● 尚未儲存</span>' : '已儲存';
 }
 
 new ResizeObserver(() => layoutCanvas()).observe(stage);
 const boxId = params.get('box');
-if (boxId && S.defects.some(x => x.id === boxId)) S.sel = boxId;   // 從缺點檢視頁進來：預先選取該框
+if (boxId && S.defects.some(x => x.id === boxId)) S.sel = boxId;   // 從類別圖片清單進來：預先選取該框
 renderAll();
 </script>
 </body>

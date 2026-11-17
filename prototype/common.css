@@ -45,9 +45,8 @@ header.app {
   content: ""; position: absolute; left: 5px; top: 5px; width: 10px; height: 8px;
   border: 2px dashed var(--danger); border-radius: 2px;
 }
-.project-chip {
-  font-size: 13px; color: var(--muted); padding: 3px 10px; border: 1px solid var(--border);
-  border-radius: 999px; background: var(--surface-2); cursor: pointer;
+.project-title {
+  font-size: 15px; font-weight: 700; letter-spacing: .5px; padding-left: 14px; border-left: 1px solid var(--border);
 }
 .user { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--muted); }
 .avatar {
@@ -59,7 +58,7 @@ header.app {
   cursor: pointer; color: var(--muted);
 }
 .icon-btn:hover { background: var(--surface-2); color: var(--text); }
-@media (max-width: 640px) { .user .uname, .project-chip { display: none; } header.app { padding: 0 16px; } }
+@media (max-width: 640px) { .user .uname { display: none; } header.app { padding: 0 16px; } }
 
 /* Buttons */
 .btn {

@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>類別圖片清單</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  .page { max-width: 1440px; margin: 0 auto; padding: 16px 20px 40px; }
+  @media (max-width: 640px) { .page { padding: 12px 16px 32px; } }
+  .crumb { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+  .crumb a { color: var(--muted); text-decoration: none; }
+  .crumb a:hover { color: var(--primary); }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+
+  .head { padding: 18px 20px; display: flex; gap: 20px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .title .sw { width: 16px; height: 16px; border-radius: 4px; }
+  .title h1 { font-size: 22px; margin: 0; }
+  .title .en { color: var(--muted); font-size: 13px; }
+  .sub { color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+  .switch-cls { width: 260px; }
+  @media (max-width: 640px) { .switch-cls { width: 100%; } }
+
+
+  .toolbar {
+    position: sticky; top: 56px; z-index: 4; background: var(--bg);
+    display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 12px 0; font-size: 14px;
+  }
+  .toolbar .muted { color: var(--muted); font-size: 13px; }
+  .tools { display: flex; align-items: center; gap: 14px; }
+  .switch { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--muted); user-select: none; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .seg button { border: 0; background: none; padding: 4px 11px; font-size: 13px; cursor: pointer; color: var(--muted); }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+
+  .vgrid { position: relative; }
+  .item {
+    position: absolute; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden; cursor: pointer; transition: border-color .12s, box-shadow .12s;
+  }
+  .item:hover { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+  .thumb { position: relative; background: #0e2a1e; overflow: hidden; }
+  .thumb img { width: 100%; height: 100%; display: block; object-fit: cover; }
+  .bx { position: absolute; border: 2px solid; border-radius: 1px; pointer-events: none; }
+  .bx.dim { opacity: .25; }
+  .hide-boxes .bx { display: none; }
+  .tag {
+    position: absolute; font-size: 11.5px; padding: 1px 7px; border-radius: 6px; font-weight: 600;
+    background: rgba(0,0,0,.65); color: #fff; backdrop-filter: blur(2px);
+  }
+  .tag.lock { top: 6px; right: 6px; }
+  .info { padding: 7px 10px 9px; }
+  .r1 { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 12.5px; }
+  .fn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nbx { color: var(--muted); white-space: nowrap; font-size: 12px; }
+  .r2 { display: flex; align-items: center; gap: 8px; margin-top: 5px; overflow: hidden; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .r2 .badge { font-size: 11px; padding: 0 7px; flex: none; }
+
+  .more { text-align: center; color: var(--muted); font-size: 13px; padding: 20px 0 8px; display: flex; justify-content: center; align-items: center; gap: 8px; }
+  .empty { text-align: center; padding: 72px 16px; color: var(--muted); }
+  .empty .btn { margin-top: 14px; }
+</style>
+</head>
+<body>
+<header class="app"></header>
+
+<div class="page">
+  <nav class="crumb"><a href="index.html">主頁</a> › <a href="stats.html">缺點分布統計</a> › 類別圖片清單</nav>
+  <div id="content"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<script src="common.js"></script>
+<script>
+renderHeader();
+
+// 正式版：GET /defects?class_id=&mode=image（跨全部 Lot，cursor 分頁）
+const params = new URLSearchParams(location.search);
+const CID = params.get('class_id');
+const cls = CID !== null && CLASSES[+CID] ? CLASSES[+CID] : null;
+if (!cls) {
+  $('content').innerHTML = `<div class="panel empty"><div style="font-size:16px;color:var(--text)">找不到這個缺點類別。</div>
+    <a class="btn btn-primary" href="stats.html">回缺點分布統計</a></div>`;
+  throw new Error('stop');
+}
+document.title = `${cls.display} · 類別圖片清單`;
+
+const OPEN_LOTS = Object.keys(LOTS).filter(k => getLot(k).status !== 'new');
+// 跨全部 Lot 合併（畫面不顯示 Lot；內部仍記錄 Lot，不同 Lot 的 id 可能相同，所以用 lot + id 辨識）
+const items = OPEN_LOTS.flatMap(lot => genItems(lot, getLot(lot))
+  .filter(it => it.classes.has(cls.id))
+  .map(it => Object.assign(it, { lot, key: lot + '/' + it.id, nCls: it.defects.filter(d => d.class_id === cls.id).length })));
+const THUMBS = makeThumbs();
+const W = 300, H = 300;
+
+$('content').innerHTML = `
+  <section class="panel head">
+    <div>
+      <div class="title"><span class="sw" style="background:${cls.color}"></span><h1>${esc(cls.display)}</h1>
+        <span class="en mono">${cls.name} · ${cls.id}</span>${cls.active ? '' : '<span class="badge b-gray">停用</span>'}</div>
+      <div class="sub">框過「${esc(cls.display)}」的所有圖：<b>${fmt(items.length)}</b> 張</div>
+    </div>
+    <div class="switch-cls" id="clsCombo"></div>
+  </section>
+
+
+  <div class="toolbar">
+    <div><span id="resultTxt"></span> <span class="muted">· 框只標出「${esc(cls.display)}」，其他類別的框變淡</span></div>
+    <div class="tools">
+      <label class="switch"><input type="checkbox" id="showBoxes" checked>顯示框</label>
+      <div class="seg" id="density"><button data-d="s">小</button><button data-d="m">中</button><button data-d="l">大</button></div>
+    </div>
+  </div>
+
+  <div class="vgrid" id="grid"></div>
+  <div class="more" id="more"></div>`;
+
+// 切換類別
+const classCounts = (() => {
+  const n = CLASSES.map(() => 0);
+  for (const lot of OPEN_LOTS) for (const it of genItems(lot, getLot(lot))) for (const c of it.classes) n[c]++;
+  return n;
+})();
+mountCombo($('clsCombo'), {
+  placeholder: '切換到其他類別…',
+  items: () => CLASSES.map(c => ({ v: String(c.id), label: c.display, sub: c.name, color: c.color, count: classCounts[c.id], inactive: !c.active })),
+  onPick: (v) => { location.href = 'images.html?class_id=' + v; },
+});
+
+
+/* ---------- 虛擬捲動 + 模擬 cursor 分頁（與 Lot 清單相同） ---------- */
+const PAGE = 200, GAP = 12, INFO_H = 62;
+const DENSITY = { s: 150, m: 210, l: 300 };
+let density = 'm';
+try { density = localStorage.getItem('dl_density') || 'm'; } catch {}
+let filtered = [], loaded = 0, loading = false, geo = {};
+const grid = () => $('grid');
+
+function applyFilters() {
+  filtered = items;
+  loaded = Math.min(PAGE, filtered.length);
+  $('resultTxt').innerHTML = `共 <b>${fmt(filtered.length)}</b> 張`;
+  window.scrollTo({ top: Math.min(scrollY, Math.max(0, grid().offsetTop - 140)) });
+  render();
+}
+function layout() {
+  const w = grid().clientWidth, min = DENSITY[density];
+  const cols = Math.max(1, Math.floor((w + GAP) / (min + GAP)));
+  const cardW = (w - GAP * (cols - 1)) / cols, thumbH = cardW * H / W;
+  geo = { cols, cardW, thumbH, rowH: thumbH + INFO_H + GAP };
+}
+function cardHtml(it, r, c) {
+  const boxes = it.defects.map(d => {
+    const cl = CLASSES[d.class_id], b = d.bbox;
+    return `<i class="bx ${d.class_id !== cls.id ? 'dim' : ''}" style="left:${b.x / W * 100}%;top:${b.y / H * 100}%;width:${b.w / W * 100}%;height:${b.h / H * 100}%;border-color:${cl.color}"></i>`;
+  }).join('');
+  return `<div class="item" data-key="${it.key}" style="top:${r * geo.rowH}px;left:${c * (geo.cardW + GAP)}px;width:${geo.cardW}px">
+    <div class="thumb" style="height:${geo.thumbH}px">
+      <img src="${THUMBS[it.thumb]}" alt="" loading="lazy" draggable="false">${boxes}
+      ${it.lockedBy ? `<span class="tag lock">🔒 ${it.lockedBy} 編輯中</span>` : ''}
+    </div>
+    <div class="info">
+      <div class="r1"><span class="fn mono">${it.filename}</span><span class="nbx">${it.nCls} 個${esc(cls.display)}</span></div>
+      <div class="r2"><span class="badge ${VERDICT[it.verdict].cls}">${VERDICT[it.verdict].label}</span><span>共 ${it.defects.length} 框</span></div>
+    </div>
+  </div>`;
+}
+let raf = 0;
+function render() {
+  cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(() => {
+    const g = grid();
+    g.classList.toggle('hide-boxes', !$('showBoxes').checked);
+    if (!filtered.length) {
+      g.style.height = 'auto';
+      g.innerHTML = `<div class="panel empty">目前沒有任何圖框過「${esc(cls.display)}」<br><a class="btn btn-ghost" href="stats.html">回缺點分布統計</a></div>`;
+      $('more').innerHTML = '';
+      return;
+    }
+    layout();
+    const rows = Math.ceil(loaded / geo.cols);
+    g.style.height = (rows * geo.rowH - GAP) + 'px';
+    const top = g.getBoundingClientRect().top;
+    const first = Math.max(0, Math.floor(-top / geo.rowH) - 2);
+    const last = Math.min(rows - 1, Math.ceil((innerHeight - top) / geo.rowH) + 2);
+    let html = '';
+    for (let r = first; r <= last; r++)
+      for (let c = 0; c < geo.cols; c++) { const i = r * geo.cols + c; if (i < loaded) html += cardHtml(filtered[i], r, c); }
+    g.innerHTML = html;
+    if (loaded < filtered.length) {
+      $('more').innerHTML = `<span class="spinner dark"></span>已載入 ${fmt(loaded)} / ${fmt(filtered.length)}，捲動載入更多…`;
+      if (last >= rows - 3) loadMore();
+    } else $('more').innerHTML = `已顯示全部 ${fmt(filtered.length)} 張`;
+  });
+}
+function loadMore() {
+  if (loading) return;
+  loading = true;
+  setTimeout(() => { loaded = Math.min(filtered.length, loaded + PAGE); loading = false; render(); }, 350);
+}
+window.addEventListener('scroll', render, { passive: true });
+window.addEventListener('resize', render);
+$('showBoxes').onchange = render;
+const segBtns = document.querySelectorAll('#density button');
+function setDensity(d) {
+  density = d; segBtns.forEach(b => b.classList.toggle('on', b.dataset.d === d));
+  try { localStorage.setItem('dl_density', d); } catch {}
+  render();
+}
+segBtns.forEach(b => b.onclick = () => setDensity(b.dataset.d));
+setDensity(density);
+
+// 打開標註頁：選取第一個該類別的框；from=class 讓上一張／下一張在這個類別內移動、回清單回到這頁
+grid().onclick = (e) => {
+  const el = e.target.closest('.item'); if (!el) return;
+  const it = items.find(x => x.key === el.dataset.key);
+  const box = it.defects.find(d => d.class_id === cls.id);
+  location.href = 'annotate.html?' + new URLSearchParams({ lot: it.lot, class_id: cls.id, from: 'class', id: it.id, box: box.id });
+};
+
+applyFilters();
+</script>
+</body>
+</html>
