@@ -113,7 +113,7 @@ roles:
   editor: [view, open_lot, annotate]   # 可開啟 Lot、框圖與修改
   viewer: [view]                       # 只能看清單、標註頁與統計
 users:
-  - {id: weichun, name: weichun, role: editor}
+  - {id: main, name: main, role: editor}
   - {id: eric,    name: Eric,    role: viewer}
   - {id: frank,   name: Frank,   role: editor, active: false}
 ```
@@ -335,5 +335,5 @@ GET  /classes/{id}/images?cursor=&limit=    # 跨全部 Lot，框過該類別的
 - 資料是 `common.js` 依 Lot 產生的決定性假資料，儲存結果存在瀏覽器 localStorage。
 - 範例 Lot：`202611-01-03`（已開啟、有標註）、`202611-02-01`（未開啟）。
 - **缺點類別與使用者權限只改 YAML**：原型每次開頁面都直接讀 `defect-labeler/backend/config/classes.yaml`、`users.yaml`（用 js-yaml 4.1.0 解析），改完重新整理即可。YAML 有錯（讀不到、id 不連續、角色未定義）時整頁顯示錯誤訊息。
-- 外部身分以 `common.js` 的 `EXTERNAL_USER_ID` 模擬（預設 weichun），改成 `eric`（viewer）可測試無權限時的行為。
+- 外部身分以 `common.js` 的 `EXTERNAL_USER_ID` 模擬（預設 main），改成 `eric`（viewer）可測試無權限時的行為。
 - 原型裡的 `STATUS`、`lockedBy` 等欄位只是假資料用途，不代表正式版的 schema。
