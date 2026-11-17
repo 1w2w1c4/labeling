@@ -3,7 +3,7 @@
 類似 labelme 的網頁標註工具，前後端都要做，用途是 **AVI 缺點偵測**的框圖標註與修正。
 
 > 狀態：設計討論已完成，可點擊的 HTML 原型（`labelImg/prototype/`）已完成，尚未開始寫正式程式。
-> 正式程式位置：`/Users/weichun/Desktop/Program/labelimg/defect-labeler/`（目前只有設定檔 `backend/config/classes.yaml`、`users.yaml`）
+> 正式程式位置：`/Program/labelimg/defect-labeler/`（目前只有設定檔 `backend/config/classes.yaml`、`users.yaml`）
 > GitHub：https://github.com/1w2w1c4/labeling
 
 # python3 -m http.server 8000
@@ -230,7 +230,7 @@ users:
 | `/stats` | 缺點分布統計（範圍固定為全部 Lot） | `stats.html` |
 | `/classes/:id/images` | 類別圖片清單：跨全部 Lot 列出框過該類別的圖 | `images.html?class_id=` |
 
-頂部列（每頁共用）：品牌、標題 **AVI**（不可點）、深淺色切換、目前使用者名稱（不可點）。
+頂部列（每頁共用）：品牌、標題 **Labelme**（不可點）、深淺色切換、目前使用者名稱（不可點）。
 
 ### 主頁 `/`
 - 輸入 Lot：自動轉大寫並補 `-`，格式正確才能查詢；查詢後顯示圖片數量、產品／站點、資料來源與標註進度。
@@ -321,7 +321,7 @@ GET  /classes/{id}/images?cursor=&limit=    # 跨全部 Lot，框過該類別的
 - [ ] 部署方式（預設 Linux + docker-compose）
 
 ### 已確認
-- 專案位置：`/Users/weichun/Desktop/Program/labelimg/defect-labeler/`
+- 專案位置：`/Program/labelimg/defect-labeler/`
 - 統計範圍：全部 Lot
 - 使用者身分：由另一個地方取得，不做登入與選擇頁面；`config/users.yaml` 管理權限
 - 缺點類別：用 `config/classes.yaml` 維護，不做管理頁
