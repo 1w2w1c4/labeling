@@ -1,4 +1,4 @@
-# AVI Defect Labeler — 後端
+# Labelme — 後端
 
 FastAPI + PyMongo（async）+ redis.asyncio。所有 API 都在 `/api` 底下。整體啟動方式（含模擬模式）見上一層的 `README.md`。
 

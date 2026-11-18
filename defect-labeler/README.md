@@ -1,4 +1,4 @@
-# AVI Defect Labeler
+# Labelme（AVI 缺點偵測框圖標註）
 
 缺點偵測框圖標註系統。後端 FastAPI（`backend/`），前端 React + TypeScript + Vite（`frontend/`）。
 

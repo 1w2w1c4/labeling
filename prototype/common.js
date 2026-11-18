@@ -143,7 +143,7 @@ function renderHeader() {
   h.innerHTML = `
     <div style="display:flex;align-items:center;gap:14px">
       <a class="brand" href="index.html"><div class="brand-mark"></div>Defect Labeler</a>
-      <span class="project-title">AVI</span>
+      <span class="project-title">Labelme</span>
     </div>
     <div class="user">
       <button class="icon-btn" id="themeBtn" title="切換深淺色">◐</button>

@@ -10,7 +10,7 @@ function readTheme(): string | null {
   }
 }
 
-/** 頂部列：品牌、標題 AVI、深淺色切換、目前使用者（都不可點，除了品牌回主頁）。 */
+/** 頂部列：品牌、標題 Labelme、深淺色切換、目前使用者（都不可點，除了品牌回主頁）。 */
 export function Header() {
   const me = useSession((s) => s.me);
   const [theme, setTheme] = useState<string | null>(readTheme);
@@ -38,7 +38,7 @@ export function Header() {
           <div className="brand-mark" />
           Defect Labeler
         </Link>
-        <span className="project-title">AVI</span>
+        <span className="project-title">Labelme</span>
       </div>
       <div className="user">
         <button className="icon-btn" onClick={toggle} title="切換深淺色">

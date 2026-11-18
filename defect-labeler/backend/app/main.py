@@ -165,7 +165,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
             if c.close is not None:
                 await c.close()
 
-    app = FastAPI(title="AVI Defect Labeler", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="Labelme", version="0.2.0", lifespan=lifespan)
     if settings.cors_origins:
         app.add_middleware(
             CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"], allow_headers=["*"]

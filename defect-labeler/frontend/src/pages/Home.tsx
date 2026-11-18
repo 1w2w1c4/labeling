@@ -23,7 +23,7 @@ export default function Home() {
   const valid = LOT_RE.test(value);
 
   useEffect(() => {
-    document.title = 'AVI Defect Labeler';
+    document.title = 'Labelme';
   }, []);
 
   const showErr = (msg: string) => {

@@ -16,7 +16,7 @@
 
 ## 1. 需求摘要
 
-- 只有一個專案：**AVI**。頂部列顯示標題 AVI，不提供切換專案。
+- 只有一個專案：**AVI**。頂部列顯示標題 **Labelme**，不提供切換專案。
 - 資料來源是**既有的 MongoDB**，前面有**既有的 Redis** 作為快取：先讀 Redis，找不到才查 Mongo（cache-aside）。
 - Redis 的 key 是 **Lot**。我們可以寫入 Redis，也可以建立自己的 key。
 - **圖片檔由 nginx 提供**。Mongo/Redis 只存圖片基本資料（含路徑），路徑轉 URL 有轉換規則。
