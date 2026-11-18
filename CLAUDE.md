@@ -2,8 +2,9 @@
 
 類似 labelme 的網頁標註工具，前後端都要做，用途是 **AVI 缺點偵測**的框圖標註與修正。
 
-> 狀態：設計討論已完成，可點擊的 HTML 原型（`labelImg/prototype/`）已完成，尚未開始寫正式程式。
-> 正式程式位置：`/Program/labelimg/defect-labeler/`（目前只有設定檔 `backend/config/classes.yaml`、`users.yaml`）
+> 狀態：M1–M4 全部功能已完成（後端 + 前端），**目前以模擬模式為主**，尚未接真正的 Mongo/Redis 測試，接著進入除錯。啟動方式見 `defect-labeler/README.md`。
+> 正式程式位置：`/Program/labelimg/defect-labeler/`
+> 注意：`.gitignore` 排除了 `defect-labeler/backend/config/`，設定檔（含 `source.yaml`）不會進 git。
 > GitHub：https://github.com/1w2w1c4/labeling
 
 # python3 -m http.server 8000
@@ -47,11 +48,19 @@
 
 ## 2. 技術選型
 
-- 後端：FastAPI + Motor（async Mongo）+ redis.asyncio + Pydantic
+- 後端：FastAPI + **PyMongo 內建的 async API**（`AsyncMongoClient`；Motor 已停止維護，不使用）+ redis.asyncio + Pydantic
+  - 本機開發：`backend/.venv`（`pip install -e ".[dev]"`），測試用 `tests/fake_mongo.py`（記憶體假 Mongo）+ fakeredis，`python -m pytest`
+  - 環境變數前綴 `DL_`（見 `backend/.env.example`）
   - 核心欄位嚴格驗證；`meta` / `extra` / `attributes` 使用 `dict[str, Any]`
-- 前端：React + TypeScript + Vite + react-konva + zustand + ECharts，格狀清單使用虛擬捲動
-- 開發環境：docker-compose（mongo + redis + nginx（假圖片 + image_filter 縮圖）+ backend + frontend）
-- `dev/seed.py` 產生假的 Lot、圖片和標註
+- 前端：React 19 + TypeScript + Vite 8 + react-konva + zustand + react-router 7 + @tanstack/react-virtual（版本固定在 package.json）
+  - **不使用 ECharts**：統計頁沿用原型的 HTML 橫條圖（每列可點）
+  - **不使用 StrictMode**：開發模式下 effect 會跑兩次，編輯鎖會被自己釋放
+  - 標註頁（Konva）以 lazy import 分開載入
+- 模擬模式 `DL_DEMO=1`：mongomock（`app/dev/mock_mongo.py` 包成 async 介面）+ fakeredis，啟動時由 `app/dev/demo.py` 產生假資料與 300×300 假圖片（`/demo-images/...`）
+- 連接埠：後端 **8001**（8000 給原型的 `python3 -m http.server`）、前端開發伺服器 5173（`/api`、`/demo-images` 轉給 8001）；`npm run build` 後後端會直接提供 `frontend/dist`
+- 所有 API 都在 **`/api`** 底下
+- 圖片 300×300，**不做縮圖**，清單直接用原圖；載入速度靠虛擬捲動、nginx HTTP/2 與長快取
+- docker-compose 尚未建立（本機沒有 Docker）
 - 部署：Linux + docker-compose（預設，尚未確認）
 
 ## 3. 專案骨架（規劃）
@@ -64,13 +73,13 @@ defect-labeler/
 │   ├── config/        source.yaml, classes.yaml, users.yaml
 │   └── app/
 │       ├── main.py
-│       ├── core/          config.py, db.py, cache.py, identity.py
-│       ├── models/        annotation.py, lot.py, defect_class.py, user.py
-│       ├── api/           lots.py, annotations.py, stats.py, classes.py, users.py
+│       ├── core/          config.py, db.py, cache.py, identity.py, tasks.py ✓
+│       ├── models/        lot.py ✓, annotation.py, defect_class.py
+│       ├── api/           me.py ✓, lots.py ✓, annotations.py, stats.py, classes.py
 │       │                  （不需要 images.py，圖片由 nginx 提供）
-│       ├── repositories/  base.py, lot_source.py, annotation.py, lot.py
-│       ├── services/      lot_opener.py, url_mapper.py, locking.py, queue.py
-│       └── tests/
+│       ├── repositories/  lot_source.py ✓, annotation.py ✓, lot.py ✓
+│       └── services/      lots.py ✓（查詢與開啟 Lot）, presence.py ✓, queue.py ✓, url_mapper.py, locking.py
+│   └── tests/             conftest.py, fake_mongo.py, test_home.py ✓
 ├── frontend/src/
 │   ├── api/
 │   ├── pages/        Home, LotView, Annotate, Stats, ClassImages
@@ -185,7 +194,8 @@ users:
   "updated_by": "使用者 id（users.yaml）", "updated_at": ISODate
 }
 ```
-- bbox 使用**原圖像素座標 `{x, y, w, h}`**（左上角＋寬高，整數）。
+- `seq`：Lot 內序號（從 1 開始，依來源順序，開啟 Lot 時給定）。清單排序、cursor 分頁與上一張／下一張都用 `(lot, seq)`，索引也以 seq 取代 _id。
+- bbox 使用**原圖像素座標 `{x, y, w, h}`**（左上角＋寬高，整數）。後端儲存時會裁切到圖內，小於 1px 回 422。
 - **圖片尺寸固定 300×300**（仍保留 `image.width/height` 欄位；Mongo 有值就用 Mongo 的值）。
 - **只記錄最後一次修改的人員與時間，以整張圖為單位**：每次儲存覆寫 `updated_by` / `updated_at`（`updated_by` 為目前使用者的 id，顯示時換成 users.yaml 的 name；時間由後端寫入伺服器時間；個別的框不記錄；不保留之前的紀錄）。只用於標註頁顯示，**不做人員統計、不提供依人員篩選**。
 - `version` 只用於樂觀鎖。
@@ -198,10 +208,12 @@ users:
 - 編輯鎖放在 Redis，文件中不存鎖的欄位。
 
 ### lots
-`{lot, image_count, status(initializing/open), progress{done, ok, ng}, extra}`
+`{lot (unique), status(initializing/open/failed), image_count, init_done, meta, error, opened_by, created_at, heartbeat_at, opened_at, extra}`
+- 標註進度（done/ok/ng）不存在 lots，查詢時用 `(lot, verdict)` 索引即時 aggregate。
+- `initializing` 超過 `DL_INIT_STALE_SECONDS`（預設 120 秒）沒有心跳，視為中斷，API 回報 `failed`，可以重新開啟。
 
 ### 索引
-- annotations：`image_id` unique、`(lot, verdict, _id)`、`(lot, defects.class_id, _id)`、`(defects.class_id, lot, _id)`（類別圖片清單跨 Lot 查詢）、`(lot, ai.result, _id)`、`(lot, ai_cmp, _id)`
+- annotations：`image_id` unique、`(lot, seq)`、`(lot, verdict, seq)`、`(lot, defects.class_id, seq)`、`(defects.class_id, lot, seq)`（類別圖片清單跨 Lot 查詢）、`(lot, ai.result, seq)`、`(lot, ai_cmp, seq)`
 
 ---
 
@@ -283,14 +295,16 @@ users:
 GET  /classes                               # 缺點類別（來自 config/classes.yaml）
 GET  /me                                    # 目前使用者的 id、name、role、權限（前端依此隱藏按鈕）
 # 所有 API 都檢查 users.yaml：不在清單或已停用回 401，權限不足回 403
-POST /lots/{lot}/open
-GET  /lots/{lot}
+POST /lots/{lot}/open                       # 開始背景初始化回 202，已開啟回 200（皆回傳 LotInfo）
+GET  /lots/{lot}                            # status: new/initializing/open/failed；data_source: redis/mongo/annotations
 GET  /lots/{lot}/annotations?verdict=&class_id=&ai=&ai_cmp=&cursor=&limit=
 GET  /lots/{lot}/facets?verdict=&class_id=&ai=&ai_cmp=   # 各篩選選項的張數
 GET  /annotations/{id}/neighbors            # 依進入來源（Lot 篩選／佇列／類別）回傳上一張、下一張
 GET  /annotations/{id}
 PUT  /annotations/{id}                      # 帶 version，衝突時回傳 409
-POST /annotations/{id}/lock                 # 取得、續約、釋放
+POST /annotations/{id}/lock                 # body {action: acquire|renew|release|status}；Redis 故障時 degraded=true
+POST /lots/{lot}/queue/next?exclude=        # 開始標註／佇列模式的下一張（已替你取得鎖）
+# 以上路徑實際都在 /api 底下；錯誤：404 找不到、409 版本衝突（附 current）、422 格式、423 別人鎖定中（附 holder）
 GET  /stats                                 # 範圍為全部 Lot；沒有標註人員參數
 GET  /classes/{id}/images?cursor=&limit=    # 跨全部 Lot，框過該類別的圖
 ```
@@ -335,5 +349,5 @@ GET  /classes/{id}/images?cursor=&limit=    # 跨全部 Lot，框過該類別的
 - 資料是 `common.js` 依 Lot 產生的決定性假資料，儲存結果存在瀏覽器 localStorage。
 - 範例 Lot：`202611-01-03`（已開啟、有標註）、`202611-02-01`（未開啟）。
 - **缺點類別與使用者權限只改 YAML**：原型每次開頁面都直接讀 `defect-labeler/backend/config/classes.yaml`、`users.yaml`（用 js-yaml 4.1.0 解析），改完重新整理即可。YAML 有錯（讀不到、id 不連續、角色未定義）時整頁顯示錯誤訊息。
-- 外部身分以 `common.js` 的 `EXTERNAL_USER_ID` 模擬（預設 main），改成 `eric`（viewer）可測試無權限時的行為。
+- 外部身分以 `common.js` 的 `EXTERNAL_USER_ID` 模擬，改成 `eric`（viewer）可測試無權限時的行為。
 - 原型裡的 `STATUS`、`lockedBy` 等欄位只是假資料用途，不代表正式版的 schema。

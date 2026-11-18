@@ -25,7 +25,7 @@ const ROLES = CFG_USERS.roles || {};
 const USERS = (CFG_USERS.users || []).map(u => ({ ...u, id: String(u.id), name: String(u.name ?? u.id), active: u.active !== false }));
 const userById = (id) => USERS.find(u => u.id === id) || null;
 // 原型：模擬外部傳來的身分（正式版由後端從外部來源取得）
-const EXTERNAL_USER_ID = 'weichun';
+const EXTERNAL_USER_ID = 'Eric';
 function currentUser() { const u = userById(EXTERNAL_USER_ID); return u && u.active ? u : null; }
 function can(perm) { const u = currentUser(); return !!u && (ROLES[u.role] || []).includes(perm); }
 function nowStr() {
